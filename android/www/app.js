@@ -115,8 +115,8 @@ async function home() {
     <div class="kpi" onclick="go('party','overdue')"><span>Overdue</span><b class="bad">${inr(od[0].v)}</b></div>
     <div class="kpi"><span>To pay suppliers</span><b>${inr(ap[0].v)}</b></div>
     <div class="kpi"><span>Stock value (saleable)</span><b>${inr(stv[0].v)}</b></div>
-    <div class="kpi" onclick="go('expiry',30)"><span>Expiring in 30 days</span><b class="warn">${inr(sumv(ex30))}</b><span>${ex30.length} batches</span></div>
-    <div class="kpi" onclick="go('expiry',0)"><span>Expired (to return / write off)</span><b class="bad">${inr(sumv(ex))}</b><span>${ex.length} batches</span></div>
+    <div class="kpi" onclick="go('expiry',30)"><span>Expiring in 30 days</span><b class="warn">${inr(sumv(ex30))}</b><span>${ex30.length} batch(es)</span></div>
+    <div class="kpi" onclick="go('expiry',0)"><span>Expired (to return / write off)</span><b class="bad">${inr(sumv(ex))}</b><span>${ex.length} batch(es)</span></div>
   </div>
   <div style="height:10px"></div>
   <button class="btn" onclick="go('order')">+ New order</button>

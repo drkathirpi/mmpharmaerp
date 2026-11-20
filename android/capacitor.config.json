@@ -3,6 +3,6 @@
   "appName": "MM Pharma",
   "webDir": "www",
   "backgroundColor": "#f4f7f6",
-  "plugins": { "CapacitorHttp": { "enabled": true } },
+  "plugins": { "CapacitorHttp": { "enabled": true }, "CapacitorCookies": { "enabled": true } },
   "android": { "allowMixedContent": false }
 }

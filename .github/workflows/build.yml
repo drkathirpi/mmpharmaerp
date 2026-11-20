@@ -40,12 +40,13 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
-          APPS_JSON_BASE64="$(base64 -w 0 "$GITHUB_WORKSPACE/apps.json")"
           cd /tmp/frappe_docker
-          docker build \
+          # The Containerfile reads the app list from a BuildKit secret named apps_json.
+          DOCKER_BUILDKIT=1 docker build \
             --build-arg=FRAPPE_PATH=https://github.com/frappe/frappe \
             --build-arg=FRAPPE_BRANCH="$FRAPPE_BRANCH" \
-            --build-arg=APPS_JSON_BASE64="$APPS_JSON_BASE64" \
+            --build-arg=CACHE_BUST="$(date +%s)" \
+            --secret=id=apps_json,src="$GITHUB_WORKSPACE/apps.json" \
             --tag="$IMAGE:v15" \
             --tag="$IMAGE:v15-$(date +%Y%m%d)" \
             --file=images/layered/Containerfile .

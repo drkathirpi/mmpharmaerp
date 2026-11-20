@@ -273,7 +273,7 @@ def stage_stock_adjust(a):
                             use_serial_batch_fields=1, allow_zero_valuation_rate=1 if float(x["valuation_rate"]) == 0 else 0)
                        for x in chunk]))
             doc.insert()
-            doc.submit()
+            doc.submit() if len(doc.items) <= 100 else doc._submit()
             r.done += len(chunk)
             if a.commit:
                 frappe.db.commit()
@@ -328,7 +328,7 @@ def stage_stock(a):
                             use_serial_batch_fields=1, allow_zero_valuation_rate=1 if float(x["valuation_rate"]) == 0 else 0)
                        for x in chunk]))
             doc.insert()
-            doc.submit()
+            doc.submit() if len(doc.items) <= 100 else doc._submit()
             r.done += len(chunk)
             if a.commit:
                 frappe.db.commit()

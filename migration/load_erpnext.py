@@ -16,6 +16,7 @@ Stages (run in this order, each is safe to re-run - existing records are skipped
     suppliers      Suppliers
     cust-invoices  Opening sales invoices (bill-wise outstanding) via Opening Invoice Creation Tool
     sup-invoices   Opening purchase invoices via the same tool
+    stock          Opening stock + batches (needs convert_stock_mrp.py output; Marg purchase rate, expiry, MRP)
     unallocated    On-account balances as opening Journal Entries (ties each party to the ledger)
 
 NOTE: written against ERPNext/Frappe v15 APIs and NOT yet executed against a live site.
@@ -227,8 +228,61 @@ def stage_unallocated(a):
     r.finish("unallocated")
 
 
+def stage_stock(a):
+    """Opening stock from convert_stock_mrp.py: creates Batches (with expiry + MRP), then Opening Stock
+    reconciliations (200 lines each) valued at Marg's purchase rate."""
+    r = Run(a)
+    fname = a.stock_file or "opening_stock_v2.csv"
+    abbr = frappe.db.get_value("Company", a.company, "abbr")
+    wh = "Stores - %s" % abbr
+    if not frappe.db.exists("Warehouse", wh):
+        wh = frappe.db.get_value("Warehouse", {"company": a.company, "is_group": 0}, "name")
+    diff = "Temporary Opening - %s" % abbr
+    rows = read(a.dir, fname)
+    print("    warehouse: %s   difference account: %s   file: %s (%d lines)" % (wh, diff, fname, len(rows)))
+    for code in {x["item_code"] for x in rows if not x["expiry_date"]}:
+        frappe.db.set_value("Item", code, "has_expiry_date", 0)
+    made = 0
+    for x in rows:
+        if frappe.db.exists("Batch", x["batch_no"]):
+            continue
+        frappe.db.savepoint("row")
+        try:
+            frappe.get_doc(dict(doctype="Batch", batch_id=x["batch_no"], item=x["item_code"],
+                                expiry_date=x["expiry_date"] or None, batch_mrp=float(x["mrp"] or 0))).insert()
+            made += 1
+        except Exception as e:
+            frappe.db.rollback(save_point="row")
+            r.reject(x, "batch: %s" % e)
+    print("    batches created: %d" % made)
+    bad = {x["batch_no"] for x in r.rejects}
+    lines = [x for x in rows if x["batch_no"] not in bad]
+    when = a.cutover or frappe.utils.today()
+    for i in range(0, len(lines), 200):
+        chunk = lines[i:i + 200]
+        frappe.db.savepoint("chunk")
+        try:
+            doc = frappe.get_doc(dict(
+                doctype="Stock Reconciliation", purpose="Opening Stock", company=a.company, posting_date=when,
+                set_posting_time=1, posting_time="00:00:01", difference_account=diff,
+                items=[dict(item_code=x["item_code"], warehouse=wh, qty=float(x["qty"]),
+                            valuation_rate=float(x["valuation_rate"]), batch_no=x["batch_no"],
+                            use_serial_batch_fields=1, allow_zero_valuation_rate=1 if float(x["valuation_rate"]) == 0 else 0)
+                       for x in chunk]))
+            doc.insert()
+            doc.submit()
+            r.done += len(chunk)
+            if a.commit:
+                frappe.db.commit()
+        except Exception as e:
+            frappe.db.rollback(save_point="chunk")
+            for x in chunk:
+                r.reject(x, "chunk %d: %s" % (i // 200 + 1, e))
+    r.finish("stock")
+
+
 STAGES = {"items": stage_items, "customers": stage_customers, "suppliers": stage_suppliers,
-          "cust-invoices": stage_cust_invoices, "sup-invoices": stage_sup_invoices, "unallocated": stage_unallocated}
+          "cust-invoices": stage_cust_invoices, "sup-invoices": stage_sup_invoices, "unallocated": stage_unallocated, "stock": stage_stock}
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -238,6 +292,7 @@ if __name__ == "__main__":
     p.add_argument("--stage", required=True, choices=list(STAGES))
     p.add_argument("--cutover", help="YYYY-MM-DD posting date for opening journal entries (required for 'unallocated')")
     p.add_argument("--commit", action="store_true", help="really write (default: dry run, rolled back)")
+    p.add_argument("--stock-file", help="stock stage: CSV name (default opening_stock_v2.csv; or opening_stock_v2_expired.csv)")
     p.add_argument("--sites-path", default=".")
     a = p.parse_args()
     if a.stage == "unallocated" and not a.cutover:

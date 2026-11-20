@@ -74,6 +74,10 @@ def first_leaf(doctype):
 # ------------------------------------------------------------------ stages
 def stage_items(a):
     r = Run(a)
+    # Pharma goods are mostly HSN 3004 (4 digits). India Compliance defaults to 6/8 digits;
+    # 4 digits is legal up to Rs 5 crore turnover - switch to 6 in GST Settings if above that.
+    if frappe.db.get_single_value("GST Settings", "validate_hsn_code"):
+        frappe.db.set_single_value("GST Settings", "min_hsn_digits", "4")
     for u in read(a.dir, "uoms.csv"):
         if not frappe.db.exists("UOM", u["uom_name"]):
             frappe.get_doc(dict(doctype="UOM", uom_name=u["uom_name"])).insert()

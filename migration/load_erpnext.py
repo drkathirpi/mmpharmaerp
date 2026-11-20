@@ -228,6 +228,20 @@ def stage_unallocated(a):
     r.finish("unallocated")
 
 
+def chunks_by_item(rows, n=100):
+    """Groups rows into chunks of about n lines without ever splitting one item across chunks
+    (Opening Stock refuses an item that already has stock in the warehouse)."""
+    rows = sorted(rows, key=lambda x: x["item_code"])
+    out, cur = [], []
+    for x in rows:
+        if len(cur) >= n and x["item_code"] != cur[-1]["item_code"]:
+            out.append(cur); cur = []
+        cur.append(x)
+    if cur:
+        out.append(cur)
+    return out
+
+
 def ensure_warehouse(a, name, abbr):
     full = "%s - %s" % (name, abbr)
     if not frappe.db.exists("Warehouse", full):
@@ -247,8 +261,8 @@ def stage_stock_adjust(a):
     rows = read(a.dir, "stock_adjust.csv")
     when = a.cutover or frappe.utils.today()
     print("    %d batch reductions in %s, posting %s" % (len(rows), wh, when))
-    for i in range(0, len(rows), 100):
-        chunk = rows[i:i + 100]
+    for ci, chunk in enumerate(chunks_by_item(rows)):
+        i = ci * 100
         frappe.db.savepoint("chunk")
         try:
             doc = frappe.get_doc(dict(
@@ -302,8 +316,8 @@ def stage_stock(a):
     bad = {x["batch_no"] for x in r.rejects}
     lines = [x for x in rows if x["batch_no"] not in bad]
     when = a.cutover or frappe.utils.today()
-    for i in range(0, len(lines), 100):
-        chunk = lines[i:i + 100]
+    for ci, chunk in enumerate(chunks_by_item(lines)):
+        i = ci * 100
         frappe.db.savepoint("chunk")
         try:
             doc = frappe.get_doc(dict(

@@ -90,3 +90,13 @@ the whole sequence on a throwaway site first.
   a batch-ID scheme for the ~20 batch numbers reused by different items.
 - GSTINs, pincodes, and per-customer rates/schemes are not in the exports.
 - Cut over on the first day of a month: re-export everything that day and re-run the converter.
+
+### Deployment notes (learned the hard way)
+- `SITE_NAME` must be set in Coolify to exactly your hostname (e.g. `erp.drkathiravan.uk`).
+- frappe_docker's layered Containerfile reads the app list from a BuildKit **secret** `apps_json`
+  (not the old `APPS_JSON_BASE64` build arg); the workflow passes `--secret=id=apps_json,src=apps.json`.
+- `apps.json` must include `frappe/payments` (required by webshop / india-compliance).
+- If `create-site` ever fails part-way, the next run says "already exists - nothing to do". Remove the
+  half-built `sites/<site>` folder in the backend container AND drop its database from the db container
+  (`DROP DATABASE`, name is in the error), then restart. Only do this on a site with no real data.
+- After first login, finish the setup wizard (India / INR / company / FY); it also turns the scheduler on.

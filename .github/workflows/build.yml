@@ -1,0 +1,52 @@
+name: build-image
+
+# Builds ERPNext v15 + India Compliance + Webshop into one image using Frappe's
+# official layered Containerfile, and pushes it to GHCR for Coolify to pull.
+# Re-runs when apps.json changes, or manually from the Actions tab.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps.json
+      - .github/workflows/build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  FRAPPE_BRANCH: version-15
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Frappe's official Docker recipe
+        run: git clone --depth 1 https://github.com/frappe/frappe_docker /tmp/frappe_docker
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          APPS_JSON_BASE64="$(base64 -w 0 "$GITHUB_WORKSPACE/apps.json")"
+          cd /tmp/frappe_docker
+          docker build \
+            --build-arg=FRAPPE_PATH=https://github.com/frappe/frappe \
+            --build-arg=FRAPPE_BRANCH="$FRAPPE_BRANCH" \
+            --build-arg=APPS_JSON_BASE64="$APPS_JSON_BASE64" \
+            --tag="$IMAGE:v15" \
+            --tag="$IMAGE:v15-$(date +%Y%m%d)" \
+            --file=images/layered/Containerfile .
+          docker push --all-tags "$IMAGE"

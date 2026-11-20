@@ -1,0 +1,188 @@
+# ERPNext v15 + India Compliance + Webshop for MM Pharma Distributors.
+# Deploy in Coolify as a "Docker Compose" resource pointing at this repo.
+#
+# Coolify generates SERVICE_PASSWORD_DB / SERVICE_PASSWORD_ADMIN and the public
+# domain (SERVICE_FQDN_FRONTEND_8080). You only set SITE_NAME (see .env.example).
+# In Coolify, set the domain on the `frontend` service to the same hostname.
+
+x-image: &image
+  image: ${FRAPPE_IMAGE:-ghcr.io/drkathirpi/mmpharmaerp}:${IMAGE_TAG:-v15}
+  pull_policy: always
+  restart: unless-stopped
+
+x-backend: &backend
+  <<: *image
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+
+services:
+  configurator:
+    <<: *image
+    restart: "no"
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host "$$DB_HOST";
+        bench set-config -gp db_port "$$DB_PORT";
+        bench set-config -g redis_cache "redis://$$REDIS_CACHE";
+        bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
+        bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
+        bench set-config -gp socketio_port "$$SOCKETIO_PORT";
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: "9000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+
+  create-site:
+    <<: *backend
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        if [ -d "sites/$$SITE_NAME" ]; then
+          echo "Site $$SITE_NAME already exists - nothing to do";
+          exit 0;
+        fi;
+        wait-for-it -t 120 db:3306;
+        wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        bench new-site \
+          --mariadb-user-host-login-scope='%' \
+          --admin-password="$$ADMIN_PASSWORD" \
+          --db-root-username=root \
+          --db-root-password="$$DB_ROOT_PASSWORD" \
+          --install-app erpnext \
+          --install-app india_compliance \
+          --install-app webshop \
+          --set-default \
+          "$$SITE_NAME";
+    environment:
+      SITE_NAME: ${SITE_NAME:?Set SITE_NAME to your ERP hostname, e.g. erp.example.com}
+      ADMIN_PASSWORD: ${SERVICE_PASSWORD_ADMIN}
+      DB_ROOT_PASSWORD: ${SERVICE_PASSWORD_DB}
+
+  backend:
+    <<: *backend
+
+  frontend:
+    <<: *image
+    command: ["nginx-entrypoint.sh"]
+    environment:
+      - SERVICE_FQDN_FRONTEND_8080
+      - BACKEND=backend:8000
+      - SOCKETIO=websocket:9000
+      # Serve this site no matter which hostname Coolify's proxy forwards.
+      - FRAPPE_SITE_NAME_HEADER=${SITE_NAME}
+      - UPSTREAM_REAL_IP_ADDRESS=127.0.0.1
+      - UPSTREAM_REAL_IP_HEADER=X-Forwarded-For
+      - UPSTREAM_REAL_IP_RECURSIVE=off
+      - PROXY_READ_TIMEOUT=120
+      - CLIENT_MAX_BODY_SIZE=50m
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - backend
+      - websocket
+
+  websocket:
+    <<: *backend
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+
+  queue-short:
+    <<: *backend
+    command: ["bench", "worker", "--queue", "short,default"]
+
+  queue-long:
+    <<: *backend
+    command: ["bench", "worker", "--queue", "long,default,short"]
+
+  scheduler:
+    <<: *backend
+    command: ["bench", "schedule"]
+
+  # Daily backup (database + uploaded files) into the `sites` volume, pruned after
+  # BACKUP_KEEP_DAYS. Copy them OFF this server too - see README "Backups".
+  backup:
+    <<: *image
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      create-site:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        sleep 600;
+        while true; do
+          bench --site "$$SITE_NAME" backup --with-files || echo "backup failed";
+          find "sites/$$SITE_NAME/private/backups" -type f -mtime +"$$BACKUP_KEEP_DAYS" -delete;
+          sleep 86400;
+        done
+    environment:
+      SITE_NAME: ${SITE_NAME}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SERVICE_PASSWORD_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost --password=$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - db-data:/var/lib/mysql
+
+  redis-cache:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-queue:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis-queue-data:/data
+
+volumes:
+  db-data:
+  sites:
+  logs:
+  redis-queue-data:

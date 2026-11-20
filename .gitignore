@@ -1,0 +1,8 @@
+# Never commit business data: Marg exports and the CSVs generated from them.
+*.xls
+*.xlsx
+*.csv
+migration/out/
+out/
+.env
+__pycache__/

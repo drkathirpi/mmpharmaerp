@@ -74,7 +74,7 @@ services:
           --set-default \
           "$$SITE_NAME";
     environment:
-      SITE_NAME: ${SITE_NAME:?Set SITE_NAME to your ERP hostname, e.g. erp.example.com}
+      SITE_NAME: ${SITE_NAME}
       ADMIN_PASSWORD: ${SERVICE_PASSWORD_ADMIN}
       DB_ROOT_PASSWORD: ${SERVICE_PASSWORD_DB}
 
@@ -142,6 +142,46 @@ services:
     environment:
       SITE_NAME: ${SITE_NAME}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+
+  # Copies the daily backups OFF this server. Each destination switches on only when its
+  # env vars are filled in Coolify: pCloud (PCLOUD_TOKEN) and/or Cloudflare R2 (R2_*).
+  # Remote copies are never deleted by this job - prune old ones from the cloud side.
+  offsite-backup:
+    image: rclone/rclone:1.68
+    restart: unless-stopped
+    depends_on:
+      create-site:
+        condition: service_completed_successfully
+    volumes:
+      - sites:/sites:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        sleep 1800;
+        while true; do
+          SRC="/sites/$$SITE_NAME/private/backups";
+          if [ -n "$$PCLOUD_TOKEN" ]; then
+            rclone copy "$$SRC" "pcloud:erp-backups/$$SITE_NAME" --max-age 3d && echo "pcloud upload ok" || echo "pcloud upload FAILED";
+          fi;
+          if [ -n "$$R2_ACCESS_KEY_ID" ] && [ -n "$$R2_BUCKET" ]; then
+            rclone copy "$$SRC" "r2:$$R2_BUCKET/$$SITE_NAME" --max-age 3d && echo "r2 upload ok" || echo "r2 upload FAILED";
+          fi;
+          sleep 86400;
+        done
+    environment:
+      SITE_NAME: ${SITE_NAME}
+      PCLOUD_TOKEN: ${PCLOUD_TOKEN:-}
+      RCLONE_CONFIG_PCLOUD_TYPE: pcloud
+      RCLONE_CONFIG_PCLOUD_TOKEN: ${PCLOUD_TOKEN:-}
+      RCLONE_CONFIG_PCLOUD_HOSTNAME: ${PCLOUD_HOSTNAME:-api.pcloud.com}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-none}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
 
   db:
     image: mariadb:10.6

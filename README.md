@@ -99,4 +99,6 @@ the whole sequence on a throwaway site first.
 - If `create-site` ever fails part-way, the next run says "already exists - nothing to do". Remove the
   half-built `sites/<site>` folder in the backend container AND drop its database from the db container
   (`DROP DATABASE`, name is in the error), then restart. Only do this on a site with no real data.
+- Do not use `${VAR:?message}` in the compose: Coolify turns the message into the variable's value.
+- Offsite backups: set `PCLOUD_TOKEN` (rclone pCloud token JSON; `PCLOUD_HOSTNAME=eapi.pcloud.com` for EU accounts) and/or `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in Coolify; the `offsite-backup` service then uploads daily.
 - After first login, finish the setup wizard (India / INR / company / FY); it also turns the scheduler on.

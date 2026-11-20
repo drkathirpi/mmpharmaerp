@@ -264,7 +264,7 @@ def stage_stock(a):
         try:
             doc = frappe.get_doc(dict(
                 doctype="Stock Reconciliation", purpose="Opening Stock", company=a.company, posting_date=when,
-                set_posting_time=1, posting_time="00:00:01", difference_account=diff,
+                set_posting_time=1, posting_time="00:00:01", expense_account=diff,
                 items=[dict(item_code=x["item_code"], warehouse=wh, qty=float(x["qty"]),
                             valuation_rate=float(x["valuation_rate"]), batch_no=x["batch_no"],
                             use_serial_batch_fields=1, allow_zero_valuation_rate=1 if float(x["valuation_rate"]) == 0 else 0)

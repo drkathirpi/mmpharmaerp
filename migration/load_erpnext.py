@@ -247,8 +247,8 @@ def stage_stock_adjust(a):
     rows = read(a.dir, "stock_adjust.csv")
     when = a.cutover or frappe.utils.today()
     print("    %d batch reductions in %s, posting %s" % (len(rows), wh, when))
-    for i in range(0, len(rows), 200):
-        chunk = rows[i:i + 200]
+    for i in range(0, len(rows), 100):
+        chunk = rows[i:i + 100]
         frappe.db.savepoint("chunk")
         try:
             doc = frappe.get_doc(dict(
@@ -266,7 +266,7 @@ def stage_stock_adjust(a):
         except Exception as e:
             frappe.db.rollback(save_point="chunk")
             for x in chunk:
-                r.reject(x, "chunk %d: %s" % (i // 200 + 1, e))
+                r.reject(x, "chunk %d: %s" % (i // 100 + 1, e))
     r.finish("stock-adjust")
 
 
@@ -302,8 +302,8 @@ def stage_stock(a):
     bad = {x["batch_no"] for x in r.rejects}
     lines = [x for x in rows if x["batch_no"] not in bad]
     when = a.cutover or frappe.utils.today()
-    for i in range(0, len(lines), 200):
-        chunk = lines[i:i + 200]
+    for i in range(0, len(lines), 100):
+        chunk = lines[i:i + 100]
         frappe.db.savepoint("chunk")
         try:
             doc = frappe.get_doc(dict(
@@ -321,7 +321,7 @@ def stage_stock(a):
         except Exception as e:
             frappe.db.rollback(save_point="chunk")
             for x in chunk:
-                r.reject(x, "chunk %d: %s" % (i // 200 + 1, e))
+                r.reject(x, "chunk %d: %s" % (i // 100 + 1, e))
     r.finish("stock")
 
 

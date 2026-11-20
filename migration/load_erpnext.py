@@ -71,6 +71,21 @@ def first_leaf(doctype):
     return frappe.db.get_value(doctype, {"is_group": 0}, "name")
 
 
+def fix_hsn(h):
+    """India Compliance needs 4/6/8 digits. Trim odd lengths to a valid prefix; blank/short -> 3004
+    (medicaments), which is right for most pharma lines. All changes are listed in hsn_review.csv."""
+    h = "".join(c for c in h if c.isdigit())
+    if len(h) in (4, 6, 8):
+        return h
+    if len(h) == 5:
+        return h[:4]
+    if len(h) == 7:
+        return h[:6]
+    if len(h) > 8:
+        return h[:8]
+    return "3004"
+
+
 # ------------------------------------------------------------------ stages
 def stage_items(a):
     r = Run(a)
@@ -86,17 +101,18 @@ def stage_items(a):
             frappe.get_doc(dict(doctype="UOM", uom_name=u["uom_name"])).insert()
     abbr = frappe.db.get_value("Company", a.company, "abbr")
     templates = {}
+    hsn_review = []
     for it in read(a.dir, "items.csv"):
         code = it["item_code"]
         if frappe.db.exists("Item", code):
             r.skipped += 1
             continue
-        hsn = it["gst_hsn_code"]
-        if hsn and len(hsn) in (4, 6, 8):
-            if not frappe.db.exists("GST HSN Code", hsn):
-                frappe.get_doc(dict(doctype="GST HSN Code", hsn_code=hsn, description="Imported from Marg")).insert()
-        else:
-            hsn = ""  # invalid in Marg too; see QA-report 'Items_bad_HSN' and fix by hand
+        orig = (it["gst_hsn_code"] or "").strip()
+        hsn = fix_hsn(orig)
+        if hsn != orig:
+            hsn_review.append(dict(item_code=code, marg_hsn=orig, used_hsn=hsn))
+        if not frappe.db.exists("GST HSN Code", hsn):
+            frappe.get_doc(dict(doctype="GST HSN Code", hsn_code=hsn, description="Imported from Marg")).insert()
         doc = dict(doctype="Item", item_code=code, item_name=code, item_group="Products",
                    stock_uom=it["stock_uom"], is_stock_item=1, has_batch_no=1, create_new_batch=1,
                    has_expiry_date=1, shelf_life_in_days=730, gst_hsn_code=hsn, description=code)
@@ -108,6 +124,12 @@ def stage_items(a):
             if templates[key]:
                 doc["taxes"] = [dict(item_tax_template=templates[key])]
         r.insert(doc, it)
+    if hsn_review:
+        with open(os.path.join(a.dir, "hsn_review.csv"), "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["item_code", "marg_hsn", "used_hsn"])
+            w.writeheader()
+            w.writerows(hsn_review)
+        print("    %d items had a missing/odd HSN in Marg and were adjusted - review hsn_review.csv" % len(hsn_review))
     missing = [k for k, v in templates.items() if not v]
     if missing:
         print("    WARNING: no Item Tax Template found for GST %s%% - items were created without tax template; "

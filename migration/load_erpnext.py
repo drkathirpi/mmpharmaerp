@@ -78,6 +78,9 @@ def stage_items(a):
     # 4 digits is legal up to Rs 5 crore turnover - switch to 6 in GST Settings if above that.
     if frappe.db.get_single_value("GST Settings", "validate_hsn_code"):
         frappe.db.set_single_value("GST Settings", "min_hsn_digits", "4")
+        frappe.db.commit()  # a harmless setting; saved even in a dry run (India Compliance reads it from cache)
+        frappe.clear_document_cache("GST Settings", "GST Settings")
+        frappe.clear_cache(doctype="GST Settings")
     for u in read(a.dir, "uoms.csv"):
         if not frappe.db.exists("UOM", u["uom_name"]):
             frappe.get_doc(dict(doctype="UOM", uom_name=u["uom_name"])).insert()

@@ -32,8 +32,8 @@ JOIN `tabStock Ledger Entry` sle ON sle.serial_and_batch_bundle = sbe.parent AND
 JOIN `tabBatch` b ON b.name = sbe.batch_no
 JOIN `tabItem` i ON i.name = sle.item_code
 WHERE b.expiry_date IS NOT NULL
-  AND b.expiry_date <= DATE_ADD(CURDATE(), INTERVAL IFNULL(NULLIF(%(within_days)s, ''), 0) DAY)
-  AND (IFNULL(%(warehouse)s, '') = '' OR sle.warehouse = %(warehouse)s)
+  AND b.expiry_date <= DATE_ADD(CURDATE(), INTERVAL %(within_days)s DAY)
+  AND sle.warehouse LIKE %(warehouse)s
 GROUP BY sbe.batch_no, sle.item_code, sle.warehouse
 HAVING SUM(sbe.qty) > 0.0001
 ORDER BY b.expiry_date, sle.item_code
@@ -63,8 +63,8 @@ def report():
         d.set("filters", [])
     else:
         d = frappe.get_doc(vals)
-    d.append("filters", dict(fieldname="within_days", label="Expires within (days)", fieldtype="Int", default="0", mandatory=0))
-    d.append("filters", dict(fieldname="warehouse", label="Warehouse", fieldtype="Link", options="Warehouse", mandatory=0))
+    d.append("filters", dict(fieldname="within_days", label="Expires within (days)", fieldtype="Int", default="0", mandatory=1))
+    d.append("filters", dict(fieldname="warehouse", label="Warehouse (% = all, or e.g. Expired%)", fieldtype="Data", default="%", mandatory=1))
     d.save() if d.get("creation") else d.insert()
     print("  report ready:", REPORT_NAME)
 

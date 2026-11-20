@@ -228,6 +228,48 @@ def stage_unallocated(a):
     r.finish("unallocated")
 
 
+def ensure_warehouse(a, name, abbr):
+    full = "%s - %s" % (name, abbr)
+    if not frappe.db.exists("Warehouse", full):
+        frappe.get_doc(dict(doctype="Warehouse", warehouse_name=name, company=a.company,
+                            parent_warehouse="All Warehouses - %s" % abbr)).insert()
+        print("    created warehouse %s" % full)
+    return full
+
+
+def stage_stock_adjust(a):
+    """stock_adjust.csv from net_negative_stock.py: lowers in-date batches to Marg's real net quantity
+    (Marg negative batches offset against positive ones). One Stock Reconciliation, offset to Temporary Opening."""
+    r = Run(a)
+    abbr = frappe.db.get_value("Company", a.company, "abbr")
+    wh = "Stores - %s" % abbr
+    diff = "Temporary Opening - %s" % abbr
+    rows = read(a.dir, "stock_adjust.csv")
+    when = a.cutover or frappe.utils.today()
+    print("    %d batch reductions in %s, posting %s" % (len(rows), wh, when))
+    for i in range(0, len(rows), 200):
+        chunk = rows[i:i + 200]
+        frappe.db.savepoint("chunk")
+        try:
+            doc = frappe.get_doc(dict(
+                doctype="Stock Reconciliation", purpose="Stock Reconciliation", company=a.company, posting_date=when,
+                set_posting_time=1, posting_time="00:00:02", expense_account=diff,
+                items=[dict(item_code=x["item_code"], warehouse=wh, qty=float(x["new_qty"]),
+                            valuation_rate=float(x["valuation_rate"]), batch_no=x["batch_no"],
+                            use_serial_batch_fields=1, allow_zero_valuation_rate=1 if float(x["valuation_rate"]) == 0 else 0)
+                       for x in chunk]))
+            doc.insert()
+            doc.submit()
+            r.done += len(chunk)
+            if a.commit:
+                frappe.db.commit()
+        except Exception as e:
+            frappe.db.rollback(save_point="chunk")
+            for x in chunk:
+                r.reject(x, "chunk %d: %s" % (i // 200 + 1, e))
+    r.finish("stock-adjust")
+
+
 def stage_stock(a):
     """Opening stock from convert_stock_mrp.py: creates Batches (with expiry + MRP), then Opening Stock
     reconciliations (200 lines each) valued at Marg's purchase rate."""
@@ -235,7 +277,9 @@ def stage_stock(a):
     fname = a.stock_file or "opening_stock_v2.csv"
     abbr = frappe.db.get_value("Company", a.company, "abbr")
     wh = "Stores - %s" % abbr
-    if not frappe.db.exists("Warehouse", wh):
+    if a.warehouse:
+        wh = ensure_warehouse(a, a.warehouse, abbr)
+    elif not frappe.db.exists("Warehouse", wh):
         wh = frappe.db.get_value("Warehouse", {"company": a.company, "is_group": 0}, "name")
     diff = "Temporary Opening - %s" % abbr
     rows = read(a.dir, fname)
@@ -282,7 +326,7 @@ def stage_stock(a):
 
 
 STAGES = {"items": stage_items, "customers": stage_customers, "suppliers": stage_suppliers,
-          "cust-invoices": stage_cust_invoices, "sup-invoices": stage_sup_invoices, "unallocated": stage_unallocated, "stock": stage_stock}
+          "cust-invoices": stage_cust_invoices, "sup-invoices": stage_sup_invoices, "unallocated": stage_unallocated, "stock": stage_stock, "stock-adjust": stage_stock_adjust}
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -293,6 +337,7 @@ if __name__ == "__main__":
     p.add_argument("--cutover", help="YYYY-MM-DD posting date for opening journal entries (required for 'unallocated')")
     p.add_argument("--commit", action="store_true", help="really write (default: dry run, rolled back)")
     p.add_argument("--stock-file", help="stock stage: CSV name (default opening_stock_v2.csv; or opening_stock_v2_expired.csv)")
+    p.add_argument("--warehouse", help="stock stage: load into this warehouse (created if missing), e.g. 'Expired Stock'")
     p.add_argument("--sites-path", default=".")
     a = p.parse_args()
     if a.stage == "unallocated" and not a.cutover:

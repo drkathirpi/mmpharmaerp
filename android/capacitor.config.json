@@ -1,0 +1,8 @@
+{
+  "appId": "uk.drkathiravan.mmpharma",
+  "appName": "MM Pharma",
+  "webDir": "www",
+  "backgroundColor": "#f4f7f6",
+  "plugins": { "CapacitorHttp": { "enabled": true } },
+  "android": { "allowMixedContent": false }
+}

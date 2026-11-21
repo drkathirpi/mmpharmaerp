@@ -97,8 +97,30 @@ const routes = [];
 const on = (re, fn, o = {}) => routes.push({ re, fn, ...o });
 let current = null;
 function go(path) { if (location.hash === '#' + path) route(); else location.hash = path; }
-function back() { if (history.length > 1) history.back(); else go('/home'); }
-window.addEventListener('hashchange', () => { if (sheetOpen) { sheetOpen = false; $('#sheetroot').innerHTML = ''; } route(); });
+/* own back stack, so Back never closes the app from a sub screen */
+const TOPRE = /^\/(home|stock|party|orders|more)(\/overdue)?$/;
+let trail = [], popping = false;
+function track() {
+  const p = (location.hash || '#/home').slice(1);
+  if (popping) { popping = false; return; }
+  if (TOPRE.test(p)) trail = p === '/home' ? ['/home'] : ['/home', p];
+  else if (trail[trail.length - 1] !== p) trail.push(p);
+}
+function back() {
+  if (trail.length > 1) {
+    trail.pop(); const p = trail[trail.length - 1];
+    if (location.hash === '#' + p) route(); else { popping = true; location.hash = p; }
+  } else if ((location.hash || '#/home') !== '#/home') { trail = ['/home']; popping = true; location.hash = '/home'; }
+}
+function hwBack() {
+  if (sheetOpen) return closeSheet();
+  if (!$('#lock').hidden) return;
+  if (trail.length > 1 || (location.hash || '#/home') !== '#/home') return back();
+  const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App; if (A) A.exitApp();
+}
+try { const A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App; if (A) A.addListener('backButton', hwBack); } catch (e) { /* browser */ }
+track();
+window.addEventListener('hashchange', () => { if (sheetOpen) { sheetOpen = false; $('#sheetroot').innerHTML = ''; } track(); route(); });
 async function route() {
   if (!S.url || !S.me) return loginView();
   const path = (location.hash || '#/home').slice(1);
@@ -245,4 +267,24 @@ async function lastSoldRate(customer, item) {
   const ls = await list('Sales Invoice Item', { parent: 'Sales Invoice', fields: ['parent', 'rate', 'qty'], filters: [['parent', 'in', inv.map(i => i.name)], ['item_code', '=', item]], limit_page_length: 100 });
   for (const i of inv) { const l = ls.find(x => x.parent === i.name); if (l) return { rate: l.rate, date: i.posting_date, qty: l.qty }; }
   return null;
+}
+
+/* ---------- PDF of a bill: download, then hand to the phone's share sheet ---------- */
+async function sharePdf(dt, name, fmt) {
+  toast('Preparing the PDF…', 20000);
+  try {
+    const url = S.url + '/api/method/frappe.utils.print_format.download_pdf?' + q({ doctype: dt, name, format: fmt, no_letterhead: 0 });
+    const P = window.Capacitor && window.Capacitor.Plugins, file = name.replace(/[^A-Za-z0-9_-]+/g, '_') + '.pdf';
+    const headers = {}; if (S.key && S.secret) headers.Authorization = 'token ' + S.key + ':' + S.secret;
+    if (P && P.Filesystem && P.Share && P.CapacitorHttp) {
+      const r = await P.CapacitorHttp.get({ url, headers, responseType: 'blob', webFetchExtra: { credentials: 'include' } });
+      if (r.status !== 200 || typeof r.data !== 'string' || !r.data.startsWith('JVBER')) throw new Error(r.status === 401 || r.status === 403 ? 'Sign in again to continue.' : 'The server could not make the PDF. Check that the print format exists.');
+      const w = await P.Filesystem.writeFile({ path: file, data: r.data, directory: 'CACHE' });
+      toast('', 1);
+      await P.Share.share({ title: name, text: name, url: w.uri, dialogTitle: 'Share bill ' + name });
+    } else {
+      const r = await fetch(url, { headers, credentials: 'include' }); if (!r.ok) throw new Error('The server could not make the PDF.');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = file; a.click(); toast('', 1);
+    }
+  } catch (e) { if (!/cancel/i.test(e.message)) toast(e.message || 'Could not share the PDF', 6000); else toast('', 1); }
 }

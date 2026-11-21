@@ -146,7 +146,7 @@ on(/^\/p\/(.+)$/, async name => {
     list('Customer', { fields: ['name', 'customer_name', 'mobile_no', 'area', 'salesman', 'drug_licence_1', 'drug_licence_2', 'allow_overdue_billing'], filters: [['name', '=', name]] }),
     list('Sales Invoice', { fields: ['name', 'posting_date', 'due_date', 'outstanding_amount', 'grand_total'], filters: [['customer', '=', name], ['docstatus', '=', 1], ['outstanding_amount', '>', 0]], order_by: 'due_date asc', limit_page_length: 300 }),
     list('Payment Entry', { fields: ['name', 'posting_date', 'paid_amount', 'mode_of_payment', 'docstatus'], filters: [['party', '=', name], ['payment_type', '=', 'Receive'], ['docstatus', '<', 2]], order_by: 'posting_date desc', limit_page_length: 5 }),
-    list('Sales Invoice', { fields: ['name', 'posting_date', 'grand_total'], filters: [['customer', '=', name], ['docstatus', '=', 1]], order_by: 'posting_date desc', limit_page_length: 5 }),
+    list('Sales Invoice', { fields: ['name', 'posting_date', 'grand_total'], filters: [['customer', '=', name], ['docstatus', '=', 1]], order_by: 'posting_date desc', limit_page_length: 15 }),
   ]);
   const x = c[0]; setTitle(x.customer_name);
   const t = today(), b = [0, 0, 0, 0, 0]; inv.forEach(i => b[bucketOf(i.due_date, t)] += i.outstanding_amount);
@@ -156,10 +156,11 @@ on(/^\/p\/(.+)$/, async name => {
   <div class="legend">${BUCKETS.map(([l], i) => b[i] > 0 ? `<span class="lg" data-i="${i}">${l} ${inr0(b[i])}</span>` : '').join('')}</div>
   <div class="acts">${total > 0 ? `<button class="btn sa" id="col">${ic('rupee', 20)}Collect</button>` : ''}<button class="btn" id="ord">${ic('receipt', 20)}Order</button></div>
   <div class="acts" style="padding-top:0">${x.mobile_no ? `<a class="btn out" href="tel:${esc(x.mobile_no)}">${ic('phone', 20)}Call</a>` : ''}${total > 0 ? `<a class="btn out" id="wa" href="#">${ic('chat', 20)}Remind</a>` : ''}</div></section>
-  <section class="sec"><h2>Unpaid bills, oldest first</h2>${inv.map(i => { const d = daysBetween(t, i.due_date); return `<div class="row"><div class="grow"><div class="t1">${esc(i.name)}</div><div class="t2">Billed ${fmtDate(i.posting_date)}, due ${fmtDate(i.due_date)}</div></div><div class="r"><b>${inr0(i.outstanding_amount)}</b>${d > 0 ? `<div class="t2 ${d > 60 ? 'red' : 'amber'}">${d} days late</div>` : ''}</div></div>`; }).join('') || empty('All paid up', 'No unpaid bills for this party.')}</section>
+  <section class="sec"><h2>Unpaid bills, oldest first</h2>${inv.map(i => { const d = daysBetween(t, i.due_date); return `<div class="row tap" data-b="${esc(i.name)}" role="button"><div class="grow"><div class="t1">${esc(i.name)}</div><div class="t2">Billed ${fmtDate(i.posting_date)}, due ${fmtDate(i.due_date)}</div></div><div class="r"><b>${inr0(i.outstanding_amount)}</b>${d > 0 ? `<div class="t2 ${d > 60 ? 'red' : 'amber'}">${d} days late</div>` : ''}</div></div>`; }).join('') || empty('All paid up', 'No unpaid bills for this party.')}</section>
   ${pays.length ? `<section class="sec"><h2>Recent payments</h2>${pays.map(p => `<div class="row"><div class="grow"><div class="t1">${inr0(p.paid_amount)}</div><div class="t2">${fmtDate(p.posting_date)}${p.mode_of_payment ? ' · ' + esc(p.mode_of_payment) : ''}</div></div>${p.docstatus === 0 ? '<span class="stamp n90">Draft</span>' : ''}</div>`).join('')}</section>` : ''}
-  ${sales.length ? `<section class="sec"><h2>Recent bills</h2>${sales.map(p => `<div class="row"><div class="grow"><div class="t1">${esc(p.name)}</div><div class="t2">${fmtDate(p.posting_date)}</div></div><b>${inr0(p.grand_total)}</b></div>`).join('')}</section>` : ''}`;
+  ${sales.length ? `<section class="sec"><h2>Recent bills</h2>${sales.map(p => `<div class="row tap" data-b="${esc(p.name)}" role="button"><div class="grow"><div class="t1">${esc(p.name)}</div><div class="t2">${fmtDate(p.posting_date)}</div></div><b>${inr0(p.grand_total)}</b></div>`).join('')}</section>` : ''}`;
   $$('.legend .lg').forEach(s => s.style.setProperty('--c', ['#9AA7BA', 'var(--saffron)', '#E0731A', 'var(--red)', '#7A130E'][s.dataset.i]));
+  $$('[data-b]').forEach(e => e.onclick = () => go('/inv/' + encodeURIComponent(e.dataset.b)));
   $('#ord').onclick = () => { order.customer = { name: x.name, customer_name: x.customer_name }; go('/order/new'); };
   if ($('#col')) $('#col').onclick = () => collectSheet(x.name, inv);
   if ($('#wa')) $('#wa').href = waLink(x.mobile_no, `Dear ${x.customer_name},\nYour outstanding with ${S.company} is ${inr0(total)}${od > 0 ? ` (${inr0(od)} overdue)` : ''}.\n\n` + inv.slice(0, 12).map(i => `${i.name}  ${fmtDate(i.posting_date)}  ${inr0(i.outstanding_amount)}`).join('\n') + (inv.length > 12 ? `\n…and ${inv.length - 12} more bills` : '') + '\n\nKindly arrange the payment. Thank you.');
@@ -211,11 +212,29 @@ on(/^\/orders$/, async () => {
   $$('.chip').forEach(b => b.onclick = () => { orderTab = b.dataset.m; route(); });
   $$('[data-o]').forEach(e => e.onclick = () => go('/so/' + encodeURIComponent(e.dataset.o)));
 }, { tab: 'orders', title: 'Orders', fab: 'New order', fabAct: () => go('/order/new') });
+
+on(/^\/inv\/(.+)$/, async name => {
+  const d = await getDoc('Sales Invoice', name); setTitle(d.name);
+  const cu = (await list('Customer', { fields: ['mobile_no'], filters: [['name', '=', d.customer]] }))[0], t = today();
+  const late = d.outstanding_amount > 0 ? daysBetween(t, d.due_date) : 0;
+  view.innerHTML = `<div class="pad" style="padding-top:0"><div class="mid">${esc(d.customer_name)}</div><div class="t2">Billed ${fmtDate(d.posting_date)} · due ${fmtDate(d.due_date)}</div>
+    <div style="margin-top:8px">${d.docstatus === 2 ? '<span class="stamp exp">Cancelled</span>' : d.outstanding_amount > 0 ? `<span class="stamp ${late > 0 ? 'exp' : 'n30'}">${inr0(d.outstanding_amount)} unpaid${late > 0 ? ', ' + late + ' days late' : ''}</span>` : '<span class="stamp ok">Paid</span>'}</div></div>
+  <div class="acts"><button class="btn" id="pdf">${ic('share', 20)}Share PDF</button><a class="btn out" id="wa" href="#">${ic('chat', 20)}Send as text</a></div>
+  <section class="sec"><h2>Items</h2>${d.items.map(i => `<div class="row"><div class="grow"><div class="t1">${esc(i.item_name)}</div><div class="t2">${num(i.qty)} × ${inr(i.rate)}${i.batch_no ? ' · batch ' + esc(i.batch_no) : ''}${i.discount_percentage ? ' · ' + num(i.discount_percentage) + '% off' : ''}</div></div><b>${inr(i.amount)}</b></div>`).join('')}
+    <div class="ld" style="padding-top:12px"><span>Total before tax</span><i></i><b>${inr(d.net_total)}</b></div>
+    ${(d.taxes || []).filter(x => x.tax_amount).map(x => `<div class="ld"><span>${esc(String(x.description).replace(/ - MPD$/, ''))}</span><i></i><b>${inr(x.tax_amount)}</b></div>`).join('')}
+    ${d.rounding_adjustment ? `<div class="ld"><span>Round off</span><i></i><b>${inr(d.rounding_adjustment)}</b></div>` : ''}
+    <div class="ld sum"><span>Bill total</span><i></i><b>${inr(d.rounded_total || d.grand_total)}</b></div><div style="height:8px"></div></section>
+  <div class="acts"><a class="btn out" href="${esc(S.url)}/app/sales-invoice/${encodeURIComponent(d.name)}">Open in ERPNext</a></div>`;
+  $('#pdf').onclick = () => sharePdf('Sales Invoice', d.name, 'MM Pharma Tax Invoice');
+  $('#wa').href = waLink(cu && cu.mobile_no, `Bill ${d.name} dated ${fmtDate(d.posting_date)}\n${d.customer_name}\nTotal ${inr(d.rounded_total || d.grand_total)}${d.outstanding_amount > 0 ? `\nUnpaid ${inr(d.outstanding_amount)}, due ${fmtDate(d.due_date)}` : ''}\n${S.company}`);
+}, { title: '' });
 on(/^\/so\/(.+)$/, async name => {
   const d = await getDoc('Sales Order', name); setTitle(d.name);
   view.innerHTML = `<div class="pad" style="padding-top:0"><div class="mid">${esc(d.customer_name)}</div><div class="t2">${fmtDate(d.transaction_date)} · ${d.docstatus === 0 ? 'Draft, not yet billed' : esc(d.status)}</div></div>
   <section class="sec">${d.items.map(i => `<div class="row"><div class="grow"><div class="t1">${esc(i.item_name)}</div><div class="t2">${num(i.qty)} × ${inr(i.rate)}</div></div><b>${inr(i.amount)}</b></div>`).join('')}<div class="ld sum"><span>Total</span><i></i><b>${inr(d.grand_total)}</b></div><div style="height:8px"></div></section>
-  <div class="acts"><a class="btn out" href="${esc(S.url)}/app/sales-order/${encodeURIComponent(d.name)}">Open in ERPNext</a><a class="btn" id="wa" href="#">${ic('chat', 20)}Share</a></div>`;
+  <div class="acts"><a class="btn out" href="${esc(S.url)}/app/sales-order/${encodeURIComponent(d.name)}">Open in ERPNext</a><a class="btn out" id="wa" href="#">${ic('chat', 20)}Text</a><button class="btn" id="pdf">${ic('share', 20)}PDF</button></div>`;
+  $('#pdf').onclick = () => sharePdf('Sales Order', d.name, 'Standard');
   const ph = (await list('Customer', { fields: ['mobile_no'], filters: [['name', '=', d.customer]] }))[0];
   $('#wa').href = waLink(ph && ph.mobile_no, `Order for ${d.customer_name}\n` + d.items.map(i => `${num(i.qty)} × ${i.item_name} @ ${inr(i.rate)}`).join('\n') + `\n\nTotal ${inr(d.grand_total)} + GST\n${S.company}`);
 }, { title: '' });

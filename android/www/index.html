@@ -2,19 +2,19 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f766e">
+<meta name="color-scheme" content="light dark">
 <title>MM Pharma</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
-<header id="top"><div id="title">MM Pharma</div><button id="refresh" aria-label="Refresh">&#8635;</button></header>
-<main id="view"></main>
-<nav id="tabs" hidden>
-  <button data-tab="home"><i>&#9962;</i>Home</button>
-  <button data-tab="stock"><i>&#128230;</i>Stock</button>
-  <button data-tab="party"><i>&#128100;</i>Parties</button>
-  <button data-tab="order"><i>&#128221;</i>Order</button>
-  <button data-tab="expiry"><i>&#9203;</i>Expiry</button>
-</nav>
-<div id="toast"></div>
-<script src="app.js"></script>
+<div id="app">
+  <header id="bar"></header>
+  <main id="view" aria-live="polite"></main>
+  <button id="fab" aria-label="Quick actions" hidden></button>
+  <nav id="tabs" hidden aria-label="Main"></nav>
+</div>
+<div id="sheetroot"></div>
+<div id="toast" role="status"></div>
+<div id="lock" hidden></div>
+<script src="core.js"></script>
+<script src="screens.js"></script>
 </body></html>

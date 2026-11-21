@@ -39,6 +39,19 @@ PRINT_HTML = """
     GSTIN: {{ doc.billing_address_gstin or "" }}<br>
     D.L. No: {{ cu.drug_licence_1 or "" }}{% if cu.drug_licence_2 %} , {{ cu.drug_licence_2 }}{% endif %}
   </td></tr></table>
+  {%- if doc.get("marg_items") -%}
+  <table style="margin-top:4px">
+    <thead><tr><th>#</th><th>Item</th><th>Batch</th><th>Exp</th><th class="r">Qty</th><th class="r">Free</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead>
+    <tbody>
+    {%- for line in doc.marg_items.split("\n") -%}
+      {%- set f = line.split("|") -%}
+      <tr><td>{{ loop.index }}</td><td>{{ f[0] }}</td><td>{{ f[5] }}</td><td>{{ f[4] }}</td>
+        <td class="r">{{ f[1] }}</td><td class="r">{{ f[2] if f[2] != "0" else "" }}</td>
+        <td class="r">{{ f[3] }}</td><td class="r">{{ "%.2f"|format(f[1]|float * f[3]|float) }}</td></tr>
+    {%- endfor -%}
+    </tbody>
+  </table>
+  {%- else -%}
   <table style="margin-top:4px">
     <thead><tr><th>#</th><th>Item</th><th>HSN</th><th>Batch</th><th>Exp</th><th class="r">MRP</th>
       <th class="r">Qty</th><th class="r">Rate</th><th class="r">Disc%</th><th class="r">Amount</th></tr></thead>
@@ -56,6 +69,7 @@ PRINT_HTML = """
     {%- endfor -%}
     </tbody>
   </table>
+  {%- endif -%}
   <table class="nb" style="margin-top:4px"><tr>
     <td style="width:55%">Amount in words:<br><b>{{ doc.in_words }}</b><br><br>
       Goods once sold will not be taken back except near-expiry returns as agreed.<br>

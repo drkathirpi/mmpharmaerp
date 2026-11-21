@@ -213,6 +213,11 @@ on(/^\/orders$/, async () => {
   $$('[data-o]').forEach(e => e.onclick = () => go('/so/' + encodeURIComponent(e.dataset.o)));
 }, { tab: 'orders', title: 'Orders', fab: 'New order', fabAct: () => go('/order/new') });
 
+function itemRows(d) {
+  if (d.marg_items) return d.marg_items.split('\n').map(l => { const f = l.split('|'), p = +f[1] || 0, fr = +f[2] || 0, r = +f[3] || 0; return `<div class="row"><div class="grow"><div class="t1">${esc(f[0])}</div><div class="t2">${num(p)}${fr ? ' + ' + num(fr) + ' free' : ''} × ${inr(r)}${f[5] ? ' · batch ' + esc(f[5]) : ''}${f[4] ? ' · exp ' + esc(f[4]) : ''}</div></div><b>${inr(p * r)}</b></div>`; }).join('');
+  if (d.items.length === 1 && /^Opening Invoice/i.test(d.items[0].item_name)) return `<div class="row"><div class="grow"><div class="t1">Opening balance brought from Marg</div><div class="t2">The drug list for this older bill was not available.</div></div></div>`;
+  return d.items.map(i => `<div class="row"><div class="grow"><div class="t1">${esc(i.item_name)}</div><div class="t2">${num(i.qty)} × ${inr(i.rate)}${i.batch_no ? ' · batch ' + esc(i.batch_no) : ''}${i.discount_percentage ? ' · ' + num(i.discount_percentage) + '% off' : ''}</div></div><b>${inr(i.amount)}</b></div>`).join('');
+}
 on(/^\/inv\/(.+)$/, async name => {
   const d = await getDoc('Sales Invoice', name); setTitle(d.name);
   const cu = (await list('Customer', { fields: ['mobile_no'], filters: [['name', '=', d.customer]] }))[0], t = today();
@@ -220,7 +225,7 @@ on(/^\/inv\/(.+)$/, async name => {
   view.innerHTML = `<div class="pad" style="padding-top:0"><div class="mid">${esc(d.customer_name)}</div><div class="t2">Billed ${fmtDate(d.posting_date)} · due ${fmtDate(d.due_date)}</div>
     <div style="margin-top:8px">${d.docstatus === 2 ? '<span class="stamp exp">Cancelled</span>' : d.outstanding_amount > 0 ? `<span class="stamp ${late > 0 ? 'exp' : 'n30'}">${inr0(d.outstanding_amount)} unpaid${late > 0 ? ', ' + late + ' days late' : ''}</span>` : '<span class="stamp ok">Paid</span>'}</div></div>
   <div class="acts"><button class="btn" id="pdf">${ic('share', 20)}Share PDF</button><a class="btn out" id="wa" href="#">${ic('chat', 20)}Send as text</a></div>
-  <section class="sec"><h2>Items</h2>${d.items.map(i => `<div class="row"><div class="grow"><div class="t1">${esc(i.item_name)}</div><div class="t2">${num(i.qty)} × ${inr(i.rate)}${i.batch_no ? ' · batch ' + esc(i.batch_no) : ''}${i.discount_percentage ? ' · ' + num(i.discount_percentage) + '% off' : ''}</div></div><b>${inr(i.amount)}</b></div>`).join('')}
+  <section class="sec"><h2>Items</h2>${itemRows(d)}
     <div class="ld" style="padding-top:12px"><span>Total before tax</span><i></i><b>${inr(d.net_total)}</b></div>
     ${(d.taxes || []).filter(x => x.tax_amount).map(x => `<div class="ld"><span>${esc(String(x.description).replace(/ - MPD$/, ''))}</span><i></i><b>${inr(x.tax_amount)}</b></div>`).join('')}
     ${d.rounding_adjustment ? `<div class="ld"><span>Round off</span><i></i><b>${inr(d.rounding_adjustment)}</b></div>` : ''}

@@ -15,16 +15,15 @@ button{width:100%;padding:12px;border:1.5px solid #c9d1e0;border-radius:12px;bac
 <button id="cp">Copy UPI ID</button>
 <div class="s" id="s">Opens GPay, PhonePe, Paytm or any UPI app on your phone.</div>
 </main><script>
-var p=new URLSearchParams(location.search),pa=p.get("pa")||"",pn=p.get("pn")||"MM PHARMA DISTRIBUTORS",am=p.get("am")||"",tn=p.get("tn")||"";
+var p=new URLSearchParams(location.search),pa=p.get("pa")||"",pn=p.get("pn")||"MM PHARMA DISTRIBUTORS",due=p.get("due")||"",tn=p.get("tn")||"";
 var ok=/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(pa);
 document.getElementById("n").textContent=pn;document.getElementById("t").textContent=tn;
 if(!ok){document.getElementById("a").textContent="";document.getElementById("go").style.display="none";document.getElementById("cp").style.display="none";document.getElementById("s").textContent="This payment link is not valid. Please ask for a new bill."}
 else{
- var q="pa="+encodeURIComponent(pa)+"&pn="+encodeURIComponent(pn)+(am?"&am="+encodeURIComponent(am):"")+"&cu=INR"+(tn?"&tn="+encodeURIComponent(tn):"");
+ var q="pa="+encodeURIComponent(pa)+"&pn="+encodeURIComponent(pn)+"&cu=INR"+(tn?"&tn="+encodeURIComponent(tn):"");
  var u="upi://pay?"+q;
- if(am)document.getElementById("a").textContent="₹ "+Number(am).toLocaleString("en-IN",{minimumFractionDigits:2});
+ if(Number(due)>0){document.getElementById("a").textContent="\u20B9 "+Number(due).toLocaleString("en-IN",{minimumFractionDigits:2});document.getElementById("s").textContent="Amount due on this bill. You can change the amount in your UPI app."}
  document.getElementById("go").href=u;
  document.getElementById("cp").onclick=function(){var b=this;(navigator.clipboard?navigator.clipboard.writeText(pa):Promise.reject()).then(function(){b.textContent="Copied "+pa},function(){b.textContent=pa})};
- setTimeout(function(){location.href=u},400);
-}
+ }
 </script></body></html>

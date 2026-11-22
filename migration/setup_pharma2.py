@@ -28,8 +28,8 @@ PRINT_HTML = """
 {%- set pdc = namespace(v=0) -%}
 {%- for pe in frappe.get_all("Payment Entry", filters=[["party_type", "=", "Customer"], ["party", "=", doc.customer], ["docstatus", "=", 1], ["reference_date", ">", doc.posting_date], ["clearance_date", "is", "not set"]], fields=["paid_amount"]) -%}{%- set pdc.v = pdc.v + pe.paid_amount -%}{%- endfor -%}
 {%- set cash = (doc.outstanding_amount or 0) <= 0 -%}
-{%- set upi = "upi://pay?pa=__UPI_ID__&pn=" ~ ("__UPI_NAME__"|urlencode) ~ "&am=" ~ ("%.2f"|format(doc.outstanding_amount or 0)) ~ "&cu=INR&tn=" ~ (("Bill " ~ doc.name.split("/")[0])|urlencode) -%}
-{%- set paylink = "__PAY_PAGE__?" ~ upi.split("?", 1)[1] -%}
+{%- set upi = "upi://pay?pa=__UPI_ID__&pn=" ~ ("__UPI_NAME__"|urlencode) ~ "&cu=INR&tn=" ~ (("Bill " ~ doc.name.split("/")[0])|urlencode) -%}
+{%- set paylink = "__PAY_PAGE__?" ~ upi.split("?", 1)[1] ~ "&due=" ~ ("%.2f"|format(doc.outstanding_amount or 0)) -%}
 {#- items to print: paid rows, with free-goods rows folded into the F/R column -#}
 {%- set free = namespace(d={}) -%}
 {%- for r in doc.items if r.is_free_item -%}{%- set _ = free.d.update({r.item_code: free.d.get(r.item_code, 0) + r.qty}) -%}{%- endfor -%}
@@ -92,7 +92,7 @@ PRINT_HTML = """
   {%- for p in pend[:11] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and (p.due_date|string) < (doc.posting_date|string) else "" }}{{ p.name.split("/")[0] }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
   <table class="bx" style="margin-top:4px; font-size:7pt"><tr><td class="b" style="width:40%">Bill No<br>Date<br>Type<br>Route<br>Due Date<br>Bill Disc</td>
     <td class="b">: {{ doc.name.split("/")[0] }}<br>: {{ frappe.utils.formatdate(doc.posting_date, fmt) }}<br>: {{ "CASH" if cash else "CREDIT" }}<br>: {{ cu.area or "" }}<br>: {{ frappe.utils.formatdate(doc.due_date, fmt) if doc.due_date else "" }}<br>: </td></tr>
-    {%- if not cash and not doc.is_return and (doc.outstanding_amount or 0) > 0 -%}<tr><td colspan="2" class="c" style="padding-top:3px"><a href="{{ paylink }}" style="color:#000; text-decoration:none"><span class="upiqr" data-u="{{ upi }}" style="display:inline-block; width:62%">{% if co.upi_qr %}<img src="{{ co.upi_qr }}" style="width:100%">{% endif %}</span><span class="b" style="font-size:7pt">Scan or tap to pay<br>&#8377; {{ "%.2f"|format(doc.outstanding_amount) }}</span></a></td></tr>
+    {%- if not cash and not doc.is_return and (doc.outstanding_amount or 0) > 0 -%}<tr><td colspan="2" class="c" style="padding-top:3px"><div style="width:62%; margin:0 auto"><a href="{{ paylink }}" style="text-decoration:none"><span class="upiqr" data-u="{{ upi }}" style="display:inline-block; width:100%">{% if co.upi_qr %}<img src="{{ co.upi_qr }}" style="width:100%">{% endif %}</span></a></div><div class="b" style="font-size:7pt; margin-top:2px">Scan or tap to pay</div></td></tr>
     {%- elif co.upi_qr and not doc.is_return -%}<tr><td colspan="2" class="c"><img src="{{ co.upi_qr }}" style="width:46%"></td></tr>{%- endif -%}</table>
   <table class="bx gy" style="margin-top:2px"><tr><td class="b">Net Amt : <span class="big">{{ "%.2f"|format(doc.rounded_total or doc.grand_total) }}</span></td></tr></table>
   <div style="margin-top:3px"><img src="__TAMIL_A__" style="width:86%"></div>

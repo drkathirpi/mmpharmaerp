@@ -74,7 +74,7 @@ PRINT_HTML = """
   <tr><td class="b" style="font-size:6.8pt; border-top:1px solid #000">{{ doc.customer_name }}<br>{{ ad.t|replace("\\n", ", ") }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}<br>{{ cu.mobile_no or "" }}</td></tr></table>
   <div class="c u" style="font-size:8.5pt">Pending Bills</div>
   <table class="nb" style="font-size:6.8pt"><tr><td class="u">Bill No</td><td class="u c">Date</td><td class="u r">Balance</td></tr>
-  {%- for p in pend[:12] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name.split("/")[0] }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
+  {%- for p in pend[:12] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and (p.due_date|string) < (doc.posting_date|string) else "" }}{{ p.name.split("/")[0] }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
   <table class="bx" style="margin-top:4px; font-size:7pt"><tr><td class="b" style="width:40%">Bill No<br>Date<br>Type<br>Route<br>Due Date<br>Bill Disc</td>
     <td class="b">: {{ doc.name.split("/")[0] }}<br>: {{ frappe.utils.formatdate(doc.posting_date, fmt) }}<br>: {{ "CASH" if cash else "CREDIT" }}<br>: {{ cu.area or "" }}<br>: {{ frappe.utils.formatdate(doc.due_date, fmt) if doc.due_date else "" }}<br>: </td></tr>
     {%- if co.upi_qr -%}<tr><td colspan="2" class="c"><img src="{{ co.upi_qr }}" style="width:34%"></td></tr>{%- endif -%}</table>
@@ -105,7 +105,7 @@ PRINT_HTML = """
     <td style="width:1%"></td>
     <td class="bx" style="padding:2px 4px"><span class="u" style="font-size:8pt">Pending Bill Details &nbsp; OUTSTANDING: {{ "%.2f"|format(tot_due) }}</span>
       <table class="nb" style="font-size:6.8pt"><tr><td class="u">Bill No</td><td class="u">Bill Date</td><td class="u r">Bill Amount</td><td class="u r">Outstanding</td></tr>
-      {%- for p in pend[:5] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name.split("/")[0] }}</td><td class="b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.grand_total) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
+      {%- for p in pend[:5] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and (p.due_date|string) < (doc.posting_date|string) else "" }}{{ p.name.split("/")[0] }}</td><td class="b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.grand_total) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
       <span class="u">TOTAL BILLS DUE : {{ pend|length }}</span></td>
    </tr></table>
   </td></tr>

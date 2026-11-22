@@ -69,12 +69,12 @@ PRINT_HTML = """
   .inv .tb {border:1.3px solid #000; border-top:none;} .inv .nw td {white-space:nowrap;}
 </style>
 <div class="inv">
-{#- split rows into pages: 13 rows per page, last page keeps up to 5 rows plus the totals -#}
+{#- split rows into pages: 12 rows per page, last page keeps up to 3 rows plus the totals -#}
 {%- set pages = namespace(l=[], i=0, done=false) -%}
 {%- set n = rows.l|length -%}
 {%- for _ in range(n + 1) -%}{%- if not pages.done -%}
   {%- set rem = n - pages.i -%}
-  {%- if rem <= 5 -%}{%- set take = rem -%}{%- set pages.done = true -%}{%- else -%}{%- set take = [13, rem - 5]|min -%}{%- endif -%}
+  {%- if rem <= 3 -%}{%- set take = rem -%}{%- set pages.done = true -%}{%- else -%}{%- set take = [12, rem - 3]|min -%}{%- endif -%}
   {%- set _ = pages.l.append({"s": pages.i, "e": pages.i + take}) -%}{%- set pages.i = pages.i + take -%}
 {%- endif -%}{%- endfor -%}
 {%- for pgi in pages.l -%}
@@ -125,7 +125,7 @@ PRINT_HTML = """
  </tbody>
 </table>
 {%- if loop.last -%}
-<div style="margin-top:3px; page-break-inside:avoid">
+<div style="margin-top:3px">
 <div><img src="__TAMIL_B__" style="height:4.6mm"> <b>{{ co.phone_no or "" }}</b></div>
 <table class="bx" style="margin-top:2px"><tr>
   <td style="width:60%; padding:0">

@@ -9,6 +9,7 @@ on(/^\/home$/, async () => {
     const t = new Date(), hr = t.getHours(), gr = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
     const mx = Math.max(...d.days.map(x => x.v), 1);
     view.innerHTML = `<div class="pad" style="padding-top:0"><div class="mut">${t.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><div class="mid">${gr}</div></div>
+    ${typeof shortcutsHtml === 'function' ? shortcutsHtml() : ''}
     <section class="sec"><h2>Today’s day sheet</h2>
       <div class="ld"><span>Sales</span><i></i><b>${inr0(d.salesToday)}</b></div>
       <div class="ld"><span>Bills made</span><i></i><b>${d.billsToday}</b></div>
@@ -155,12 +156,15 @@ on(/^\/p\/(.+)$/, async name => {
   <section class="sec"><div class="pad"><div class="t2">Outstanding</div><div class="big">${inr0(total)}</div>${od > 0 ? `<div class="red" style="margin-top:2px">${inr0(od)} overdue</div>` : '<div class="green" style="margin-top:2px">Nothing overdue</div>'}<div style="margin-top:12px">${ageBar(b, total)}</div></div>
   <div class="legend">${BUCKETS.map(([l], i) => b[i] > 0 ? `<span class="lg" data-i="${i}">${l} ${inr0(b[i])}</span>` : '').join('')}</div>
   <div class="acts">${total > 0 ? `<button class="btn sa" id="col">${ic('rupee', 20)}Collect</button>` : ''}<button class="btn" id="ord">${ic('receipt', 20)}Order</button></div>
-  <div class="acts" style="padding-top:0">${x.mobile_no ? `<a class="btn out" href="tel:${esc(x.mobile_no)}">${ic('phone', 20)}Call</a>` : ''}${total > 0 ? `<a class="btn out" id="wa" href="#">${ic('chat', 20)}Remind</a>` : ''}</div></section>
+  <div class="acts" style="padding-top:0">${x.mobile_no ? `<a class="btn out" href="tel:${esc(x.mobile_no)}">${ic('phone', 20)}Call</a>` : ''}${total > 0 ? `<a class="btn out" id="wa" href="#">${ic('chat', 20)}Remind</a>` : ''}</div>
+  <div class="acts" style="padding-top:0"><button class="btn out" id="lg">${ic('file', 20)}Ledger</button><button class="btn out" id="nb">${ic('plus', 20)}New bill</button></div></section>
   <section class="sec"><h2>Unpaid bills, oldest first</h2>${inv.map(i => { const d = daysBetween(t, i.due_date); return `<div class="row tap" data-b="${esc(i.name)}" role="button"><div class="grow"><div class="t1">${esc(i.name)}</div><div class="t2">Billed ${fmtDate(i.posting_date)}, due ${fmtDate(i.due_date)}</div></div><div class="r"><b>${inr0(i.outstanding_amount)}</b>${d > 0 ? `<div class="t2 ${d > 60 ? 'red' : 'amber'}">${d} days late</div>` : ''}</div></div>`; }).join('') || empty('All paid up', 'No unpaid bills for this party.')}</section>
   ${pays.length ? `<section class="sec"><h2>Recent payments</h2>${pays.map(p => `<div class="row"><div class="grow"><div class="t1">${inr0(p.paid_amount)}</div><div class="t2">${fmtDate(p.posting_date)}${p.mode_of_payment ? ' · ' + esc(p.mode_of_payment) : ''}</div></div>${p.docstatus === 0 ? '<span class="stamp n90">Draft</span>' : ''}</div>`).join('')}</section>` : ''}
   ${sales.length ? `<section class="sec"><h2>Recent bills</h2>${sales.map(p => `<div class="row tap" data-b="${esc(p.name)}" role="button"><div class="grow"><div class="t1">${esc(p.name)}</div><div class="t2">${fmtDate(p.posting_date)}</div></div><b>${inr0(p.grand_total)}</b></div>`).join('')}</section>` : ''}`;
   $$('.legend .lg').forEach(s => s.style.setProperty('--c', ['#9AA7BA', 'var(--saffron)', '#E0731A', 'var(--red)', '#7A130E'][s.dataset.i]));
   $$('[data-b]').forEach(e => e.onclick = () => go('/inv/' + encodeURIComponent(e.dataset.b)));
+  $('#lg').onclick = () => go('/ledger/Customer/' + encodeURIComponent(x.name));
+  $('#nb').onclick = () => { ED = edNew('sales'); ED.party = { name: x.name, title: x.customer_name }; go('/bill/new'); };
   $('#ord').onclick = () => { order.customer = { name: x.name, customer_name: x.customer_name }; go('/order/new'); };
   if ($('#col')) $('#col').onclick = () => collectSheet(x.name, inv);
   if ($('#wa')) $('#wa').href = waLink(x.mobile_no, `Dear ${x.customer_name},\nYour outstanding with ${S.company} is ${inr0(total)}${od > 0 ? ` (${inr0(od)} overdue)` : ''}.\n\n` + inv.slice(0, 12).map(i => `${i.name}  ${fmtDate(i.posting_date)}  ${inr0(i.outstanding_amount)}`).join('\n') + (inv.length > 12 ? `\n…and ${inv.length - 12} more bills` : '') + '\n\nKindly arrange the payment. Thank you.');
@@ -225,6 +229,7 @@ on(/^\/inv\/(.+)$/, async name => {
   view.innerHTML = `<div class="pad" style="padding-top:0"><div class="mid">${esc(d.customer_name)}</div><div class="t2">Billed ${fmtDate(d.posting_date)} · due ${fmtDate(d.due_date)}</div>
     <div style="margin-top:8px">${d.docstatus === 2 ? '<span class="stamp exp">Cancelled</span>' : d.outstanding_amount > 0 ? `<span class="stamp ${late > 0 ? 'exp' : 'n30'}">${inr0(d.outstanding_amount)} unpaid${late > 0 ? ', ' + late + ' days late' : ''}</span>` : '<span class="stamp ok">Paid</span>'}</div></div>
   <div class="acts"><button class="btn" id="pdf">${ic('share', 20)}Share PDF</button><a class="btn out" id="wa" href="#">${ic('chat', 20)}Send as text</a></div>
+  ${typeof billActions === 'function' ? billActions(d) : ''}
   <section class="sec"><h2>Items</h2>${itemRows(d)}
     <div class="ld" style="padding-top:12px"><span>Total before tax</span><i></i><b>${inr(d.net_total)}</b></div>
     ${(d.taxes || []).filter(x => x.tax_amount).map(x => `<div class="ld"><span>${esc(String(x.description).replace(/ - MPD$/, ''))}</span><i></i><b>${inr(x.tax_amount)}</b></div>`).join('')}
@@ -232,6 +237,7 @@ on(/^\/inv\/(.+)$/, async name => {
     <div class="ld sum"><span>Bill total</span><i></i><b>${inr(d.rounded_total || d.grand_total)}</b></div><div style="height:8px"></div></section>
   <div class="acts"><a class="btn out" href="${esc(S.url)}/app/sales-invoice/${encodeURIComponent(d.name)}">Open in ERPNext</a></div>`;
   $('#pdf').onclick = () => sharePdf('Sales Invoice', d.name, 'MM Pharma Tax Invoice');
+  if (typeof wireBill === 'function') wireBill(d);
   $('#wa').href = waLink(cu && cu.mobile_no, `Bill ${d.name} dated ${fmtDate(d.posting_date)}\n${d.customer_name}\nTotal ${inr(d.rounded_total || d.grand_total)}${d.outstanding_amount > 0 ? `\nUnpaid ${inr(d.outstanding_amount)}, due ${fmtDate(d.due_date)}` : ''}\n${S.company}`);
 }, { title: '' });
 on(/^\/so\/(.+)$/, async name => {
@@ -307,9 +313,12 @@ function itemPicker(done, preset) {
 on(/^\/more$/, async () => {
   const low = (S.badge && S.badge.more) || 0;
   const row = (i, t, s, g, b) => `<div class="row tap" data-go="${g}" role="button"><span class="alert" style="padding:0;border:0"><span class="ico amber" style="background:var(--sunk);color:var(--ink)">${ic(i, 20)}</span></span><div class="grow"><div class="t1">${t}</div><div class="t2">${s}</div></div>${b ? `<span class="stamp n30">${b}</span>` : ''}${ic('chev', 18)}</div>`;
-  view.innerHTML = `<section class="sec"><h2>Sales and money</h2>${row('chart', 'Sales and margin', 'By party, item, company and salesman', '/reports')}${row('rupee', 'Receivable aging', 'Who owes what, by how late', '/aging')}${row('truck', 'Payable to suppliers', 'What you owe', '/payables')}</section>
+  view.innerHTML = `<section class="sec"><h2>Make an entry</h2>${row('receipt', 'New bill', 'Sale with batch, free goods and GST', '/bill/new')}${row('cart', 'Purchase bill', 'Stock in from a supplier', '/pur/new')}${row('rupee', 'Customer receipt', 'Money received, with e-receipt', '/receipt')}${row('truck', 'Supplier payment', 'Money paid out', '/pay')}${row('refresh', 'Sales return', 'Goods back from a customer', '/bill/return')}${row('refresh', 'Purchase return', 'Goods or expired stock back to a supplier', '/pur/return')}${row('layers', 'Stock adjustment', 'Add or remove stock', '/adjust')}</section>
+  <section class="sec"><h2>Find and change</h2>${row('receipt', 'Sales bills', 'Search, edit, return, PDF, Excel, e-way bill', '/bills')}${row('cart', 'Purchase bills', 'Search, edit, return', '/purchases')}</section>
+  <section class="sec"><h2>Create new</h2>${row('box', 'Item', 'With HSN, GST rate and salt', '/new/item')}${row('users', 'Customer', 'With address, GSTIN and licence', '/new/customer')}${row('truck', 'Supplier', 'With address and GSTIN', '/new/supplier')}${row('file', 'HSN code', '', '/new/hsn')}${row('pill', 'Salt', '', '/new/salt')}</section>
+  <section class="sec"><h2>Reports</h2>${row('chart', 'All reports', 'Turnover, ledgers, books, GST, stock', '/rpt')}${row('chart', 'Sales and margin', 'By party, item, company and salesman', '/reports')}${row('rupee', 'Receivable aging', 'Who owes what, by how late', '/aging')}${row('truck', 'Payable to suppliers', 'What you owe', '/payables')}</section>
   <section class="sec"><h2>Stock</h2>${row('cart', 'Reorder suggestions', 'Fast movers running low', '/reorder', low || '')}${row('clock', 'Expiry register', 'Expired and expiring batches', '/expiry/90')}${row('file', 'Schedule drug register', 'Schedule H, H1, X and narcotic sales', '/schedule')}</section>
-  <section class="sec"><h2>App</h2>${row('lock', 'Settings', 'Theme, PIN lock, sign out', '/settings')}</section>
+  <section class="sec"><h2>App</h2>${row('grid', 'Shortcuts', 'Choose the buttons shown on Home', '/shortcuts')}${row('lock', 'Settings', 'Theme, PIN lock, sign out', '/settings')}</section>
   <div class="pad t2" style="text-align:center">${esc(S.company || '')}<br>Signed in as ${esc(S.user || '')}</div>`;
   $$('[data-go]').forEach(e => e.onclick = () => go(e.dataset.go));
 }, { tab: 'more', title: 'More' });

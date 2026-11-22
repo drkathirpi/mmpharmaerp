@@ -139,3 +139,12 @@ nav button .dot{position:absolute;top:8px;right:calc(50% - 20px);min-width:16px;
 .ptr{height:0;overflow:hidden;display:grid;place-items:center;color:var(--ink2);font-size:13px;transition:height .15s}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 :focus-visible{outline:2px solid var(--cobalt);outline-offset:2px}
+.cap{padding:8px 16px 4px;font-size:13px;color:var(--ink2)}
+.form{padding:4px 0 24px}.ta{width:100%;min-height:80px;padding:12px 16px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--paper);font:inherit}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;padding:0 4px}.two>div{min-width:0}
+.bsel{border-left:4px solid transparent}.bsel.on{border-left-color:var(--cobalt);background:var(--sunk)}
+.rtw{overflow-x:auto;margin:0 12px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper)}
+.rt{border-collapse:collapse;font-size:12.5px;min-width:100%}.rt th,.rt td{padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}.rt th{position:sticky;top:0;background:var(--sunk);font-weight:600}.rt .r{text-align:right;font-variant-numeric:tabular-nums}
+.sc{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px}
+.scb{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 2px;border:0;background:none;font-size:12px;color:var(--ink);text-align:center}
+.scb .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:var(--sunk)}

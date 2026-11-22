@@ -167,7 +167,7 @@ on(/^\/p\/(.+)$/, async name => {
   $('#nb').onclick = () => { ED = edNew('sales'); ED.party = { name: x.name, title: x.customer_name }; go('/bill/new'); };
   $('#ord').onclick = () => { order.customer = { name: x.name, customer_name: x.customer_name }; go('/order/new'); };
   if ($('#col')) $('#col').onclick = () => collectSheet(x.name, inv);
-  if ($('#wa')) $('#wa').href = waLink(x.mobile_no, `Dear ${x.customer_name},\nYour outstanding with ${S.company} is ${inr0(total)}${od > 0 ? ` (${inr0(od)} overdue)` : ''}.\n\n` + inv.slice(0, 12).map(i => `${i.name}  ${fmtDate(i.posting_date)}  ${inr0(i.outstanding_amount)}`).join('\n') + (inv.length > 12 ? `\n…and ${inv.length - 12} more bills` : '') + '\n\nKindly arrange the payment. Thank you.');
+  if ($('#wa')) $('#wa').href = waLink(x.mobile_no, `Dear ${x.customer_name},\nYour outstanding with ${S.company} is ${inr0(total)}${od > 0 ? ` (${inr0(od)} overdue)` : ''}.\n\n` + inv.slice(0, 12).map(i => `${i.name}  ${fmtDate(i.posting_date)}  ${inr0(i.outstanding_amount)}`).join('\n') + (inv.length > 12 ? `\n…and ${inv.length - 12} more bills` : '') + `\n\nPay ${inr0(total)} now: ${payLink(total, 'Dues ' + x.customer_name.slice(0, 30))}\nThank you.`);
 }, { title: '' });
 
 function partyPicker(cb) {
@@ -238,7 +238,7 @@ on(/^\/inv\/(.+)$/, async name => {
   <div class="acts"><a class="btn out" href="${esc(S.url)}/app/sales-invoice/${encodeURIComponent(d.name)}">Open in ERPNext</a></div>`;
   $('#pdf').onclick = () => sharePdf('Sales Invoice', d.name, 'MM Pharma Tax Invoice');
   if (typeof wireBill === 'function') wireBill(d);
-  $('#wa').href = waLink(cu && cu.mobile_no, `Bill ${d.name} dated ${fmtDate(d.posting_date)}\n${d.customer_name}\nTotal ${inr(d.rounded_total || d.grand_total)}${d.outstanding_amount > 0 ? `\nUnpaid ${inr(d.outstanding_amount)}, due ${fmtDate(d.due_date)}` : ''}\n${S.company}`);
+  $('#wa').href = waLink(cu && cu.mobile_no, `Bill ${d.name} dated ${fmtDate(d.posting_date)}\n${d.customer_name}\nTotal ${inr(d.rounded_total || d.grand_total)}${d.outstanding_amount > 0 ? `\nUnpaid ${inr(d.outstanding_amount)}, due ${fmtDate(d.due_date)}\nPay now: ${payLink(d.outstanding_amount, 'Bill ' + d.name)}` : ''}\n${S.company}`);
 }, { title: '' });
 on(/^\/so\/(.+)$/, async name => {
   const d = await getDoc('Sales Order', name); setTitle(d.name);

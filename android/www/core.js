@@ -288,3 +288,7 @@ async function sharePdf(dt, name, fmt) {
     }
   } catch (e) { if (!/cancel/i.test(e.message)) toast(e.message || 'Could not share the PDF', 6000); else toast('', 1); }
 }
+
+/* tap-to-pay link: opens the customer's UPI app with the amount filled in */
+const UPI_ID = 'Vyapar.172141833373@hdfcbank', UPI_NAME = 'MM PHARMA DISTRIBUTORS', PAY_PAGE = 'https://drkathirpi.github.io/mmpharmaerp/pay.html';
+const payLink = (amt, note) => PAY_PAGE + '?pa=' + encodeURIComponent(UPI_ID).replace(/%40/g, '@') + '&pn=' + encodeURIComponent(UPI_NAME) + '&am=' + (+amt).toFixed(2) + '&cu=INR&tn=' + encodeURIComponent(String(note).slice(0, 50));

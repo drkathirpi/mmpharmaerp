@@ -92,7 +92,7 @@ PRINT_HTML = """
   {%- for p in pend[:11] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and (p.due_date|string) < (doc.posting_date|string) else "" }}{{ p.name.split("/")[0] }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
   <table class="bx" style="margin-top:4px; font-size:7pt"><tr><td class="b" style="width:40%">Bill No<br>Date<br>Type<br>Route<br>Due Date<br>Bill Disc</td>
     <td class="b">: {{ doc.name.split("/")[0] }}<br>: {{ frappe.utils.formatdate(doc.posting_date, fmt) }}<br>: {{ "CASH" if cash else "CREDIT" }}<br>: {{ cu.area or "" }}<br>: {{ frappe.utils.formatdate(doc.due_date, fmt) if doc.due_date else "" }}<br>: </td></tr>
-    {%- if not cash and not doc.is_return and (doc.outstanding_amount or 0) > 0 -%}<tr><td colspan="2" class="c" style="padding-top:3px"><a href="{{ paylink }}" style="color:#000; text-decoration:none"><span class="upiqr" data-u="{{ upi }}" style="display:block; width:62%; margin:0 auto">{% if co.upi_qr %}<img src="{{ co.upi_qr }}" style="width:100%">{% endif %}</span><span class="b" style="font-size:7pt">Scan or tap to pay<br>&#8377; {{ "%.2f"|format(doc.outstanding_amount) }}</span></a></td></tr>
+    {%- if not cash and not doc.is_return and (doc.outstanding_amount or 0) > 0 -%}<tr><td colspan="2" class="c" style="padding-top:3px"><a href="{{ paylink }}" style="color:#000; text-decoration:none"><span class="upiqr" data-u="{{ upi }}" style="display:inline-block; width:62%">{% if co.upi_qr %}<img src="{{ co.upi_qr }}" style="width:100%">{% endif %}</span><span class="b" style="font-size:7pt">Scan or tap to pay<br>&#8377; {{ "%.2f"|format(doc.outstanding_amount) }}</span></a></td></tr>
     {%- elif co.upi_qr and not doc.is_return -%}<tr><td colspan="2" class="c"><img src="{{ co.upi_qr }}" style="width:46%"></td></tr>{%- endif -%}</table>
   <table class="bx gy" style="margin-top:2px"><tr><td class="b">Net Amt : <span class="big">{{ "%.2f"|format(doc.rounded_total or doc.grand_total) }}</span></td></tr></table>
   <div style="margin-top:3px"><img src="__TAMIL_A__" style="width:86%"></div>
@@ -165,7 +165,7 @@ PRINT_HTML = """
 {%- endfor -%}
 </div>
 <script>__QRJS__</script>
-<script>(function(){var n=document.querySelectorAll(".upiqr");for(var i=0;i<n.length;i++){try{var q=qrcode(0,"M");q.addData(n[i].getAttribute("data-u"));q.make();var c=q.getModuleCount(),r="";for(var y=0;y<c;y++)for(var x=0;x<c;x++)if(q.isDark(y,x))r+="M"+x+" "+y+"h1v1h-1z";n[i].innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 '+(c+4)+" "+(c+4)+'" style="width:100%;display:block" shape-rendering="crispEdges"><rect x="-2" y="-2" width="'+(c+4)+'" height="'+(c+4)+'" fill="#fff"/><path d="'+r+'" fill="#000"/></svg>'}catch(e){}}})();</script>
+<script>(function(){var n=document.querySelectorAll(".upiqr");for(var i=0;i<n.length;i++){try{var q=qrcode(0,"M");q.addData(n[i].getAttribute("data-u"));q.make();var c=q.getModuleCount(),k=6,z=(c+4)*k,cv=document.createElement("canvas");cv.width=cv.height=z;var g=cv.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,z,z);g.fillStyle="#000";for(var y=0;y<c;y++)for(var x=0;x<c;x++)if(q.isDark(y,x))g.fillRect((x+2)*k,(y+2)*k,k,k);var im=new Image();im.src=cv.toDataURL("image/png");im.style.width="100%";n[i].innerHTML="";n[i].appendChild(im)}catch(e){}}})();</script>
 """
 
 REPORT_NAME = "Schedule Drug Sales Register"

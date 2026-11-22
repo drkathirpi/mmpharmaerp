@@ -69,12 +69,12 @@ PRINT_HTML = """
   .inv .tb {border:1.3px solid #000; border-top:none;} .inv .nw td {white-space:nowrap;}
 </style>
 <div class="inv">
-{#- split rows into pages: 12 rows per page, last page keeps up to 3 rows plus the totals -#}
+{#- split rows into pages: 12 rows per page, last page keeps up to 2 rows plus the totals -#}
 {%- set pages = namespace(l=[], i=0, done=false) -%}
 {%- set n = rows.l|length -%}
 {%- for _ in range(n + 1) -%}{%- if not pages.done -%}
   {%- set rem = n - pages.i -%}
-  {%- if rem <= 3 -%}{%- set take = rem -%}{%- set pages.done = true -%}{%- else -%}{%- set take = [12, rem - 3]|min -%}{%- endif -%}
+  {%- if rem <= 2 -%}{%- set take = rem -%}{%- set pages.done = true -%}{%- else -%}{%- set take = [12, rem - 2]|min -%}{%- endif -%}
   {%- set _ = pages.l.append({"s": pages.i, "e": pages.i + take}) -%}{%- set pages.i = pages.i + take -%}
 {%- endif -%}{%- endfor -%}
 {%- for pgi in pages.l -%}
@@ -145,8 +145,8 @@ PRINT_HTML = """
     <tr><td class="h">Net Amount :</td><td class="big r">{{ "%.2f"|format(doc.rounded_total or doc.grand_total) }}</td></tr></table></td>
 </tr><tr><td colspan="2" class="b" style="border-top:1px solid #000">{{ doc.in_words }}</td></tr></table>
 <table class="tb"><tr>
-  <td style="width:30%"><b><i><u>Terms and Conditions</u></i></b><br><b style="font-size:8pt">Goods once sold will not be taken back or exchanged.<br>Bills not paid due date will attract 24% interest.<br>All disputes subject to TIRUPUR Jurisdiction only.</b></td>
-  <td style="width:33%; border-left:1px solid #000; font-size:8pt"><b>Bank Details- {{ co.company_name or doc.company }}</b><br><b>{{ (co.bank_details_print or "")|replace("\\n", "<br>")|safe }}</b></td>
+  <td style="width:36%"><b><i><u>Terms and Conditions</u></i></b><br><b style="font-size:6.5pt">Goods once sold will not be taken back or exchanged.<br>Bills not paid due date will attract 24% interest.<br>All disputes subject to TIRUPUR Jurisdiction only.</b></td>
+  <td style="width:36%; border-left:1px solid #000; font-size:6.5pt"><b>Bank Details- {{ co.company_name or doc.company }}</b><br><b>{{ (co.bank_details_print or "")|replace("\\n", "<br>")|safe }}</b></td>
   <td class="c" style="border-left:1px solid #000"><b>For {{ co.company_name or doc.company }}<br><br><br>Authorised Signatory</b></td>
 </tr></table>
 </div>

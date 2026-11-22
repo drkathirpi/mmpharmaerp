@@ -54,45 +54,45 @@ PRINT_HTML = """
 {%- set fmt = "dd-MM-yyyy" -%}
 <style>
   .print-format {margin-top: 4mm; margin-bottom: 9mm; margin-left: 5mm; margin-right: 5mm; page-size: A4; orientation: Landscape;}
-  .inv {font-family: "Times New Roman", Times, serif; font-size:9.5pt; color:#000; line-height:1.25;}
+  .inv {font-family: "DejaVu Sans", Arial, sans-serif; font-size:6.8pt; color:#000; line-height:1.2;}
   .inv table {border-collapse:collapse; width:100%; table-layout:auto;} .inv table.it {table-layout:fixed;} .inv td, .inv th {padding:1px 3px; vertical-align:top;}
   .inv .main {margin-right:22%;} .inv .strip {position:fixed; top:0; bottom:0; right:0; width:21%;}
   .inv .bx {border:1.3px solid #000;} .inv .gy {background:#d9d9d9;}
   .inv .r {text-align:right;} .inv .c {text-align:center;} .inv .b {font-weight:bold;}
-  .inv .h {font-size:12.5pt; font-weight:bold;} .inv .big {font-size:15pt; font-weight:bold;}
+  .inv .h {font-size:9pt; font-weight:bold;} .inv .big {font-size:11pt; font-weight:bold;}
   .inv .u {text-decoration:underline; font-style:italic; font-weight:bold;}
-  .inv .nb td, .inv .nb th {border:none; padding:0 3px;}
-  .inv .it th {border:1px solid #000; background:#e8e8e8; padding:3px; text-align:left;}
-  .inv .it td {border-left:1px solid #000; border-right:1px solid #000; padding:2px 3px; font-weight:bold; font-size:8.5pt;}
+  .inv .nb td, .inv .nb th {border:none; padding:0 2px; white-space:nowrap;}
+  .inv .it th {border:1px solid #000; background:#e8e8e8; padding:2px; text-align:left; font-size:6.5pt;}
+  .inv .it td.nm {white-space:normal;} .inv .it td {border-left:1px solid #000; border-right:1px solid #000; padding:1px 2px; font-weight:bold; font-size:6.8pt; white-space:nowrap; overflow:hidden;}
   .inv .it tr.last td {border-bottom:1px solid #000;}
   .inv thead {display:table-header-group;} .inv tr {page-break-inside:avoid;}
   .inv .tb {border:1.3px solid #000; border-top:none;} .inv .nw td {white-space:nowrap;}
 </style>
 <div class="inv">
 <div class="strip">
-  <table class="bx gy" style="margin-bottom:2px"><tr><td class="b" style="font-size:8.5pt">{{ co.company_name or doc.company }}<br>{{ (co.print_address or "")|replace("\\n", ", ") }}</td></tr>
-  <tr><td class="b" style="font-size:8.5pt; border-top:1px solid #000">{{ doc.customer_name }}<br>{{ ad.t|replace("\\n", ", ") }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}<br>{{ cu.mobile_no or "" }}</td></tr></table>
-  <div class="c u" style="font-size:11pt">Pending Bills</div>
-  <table class="nb" style="font-size:8.5pt"><tr><td class="u">Bill No</td><td class="u c">Date</td><td class="u r">Balance</td></tr>
-  {%- for p in pend[:16] -%}<tr><td style="font-size:7.5pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
-  <table class="bx" style="margin-top:4px; font-size:9pt"><tr><td class="b" style="width:46%">Bill No<br>Date<br>Type<br>Route<br>Due Date<br>Bill Disc</td>
-    <td class="b">: {{ doc.name }}<br>: {{ frappe.utils.formatdate(doc.posting_date, fmt) }}<br>: {{ "CASH" if cash else "CREDIT" }}<br>: {{ cu.area or "" }}<br>: {{ frappe.utils.formatdate(doc.due_date, fmt) if doc.due_date else "" }}<br>: </td></tr>
-    {%- if co.upi_qr -%}<tr><td colspan="2" class="c"><img src="{{ co.upi_qr }}" style="width:45%"></td></tr>{%- endif -%}</table>
+  <table class="bx gy" style="margin-bottom:2px"><tr><td class="b" style="font-size:6.8pt">{{ co.company_name or doc.company }}<br>{{ (co.print_address or "")|replace("\\n", ", ") }}</td></tr>
+  <tr><td class="b" style="font-size:6.8pt; border-top:1px solid #000">{{ doc.customer_name }}<br>{{ ad.t|replace("\\n", ", ") }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}<br>{{ cu.mobile_no or "" }}</td></tr></table>
+  <div class="c u" style="font-size:8.5pt">Pending Bills</div>
+  <table class="nb" style="font-size:6.8pt"><tr><td class="u">Bill No</td><td class="u c">Date</td><td class="u r">Balance</td></tr>
+  {%- for p in pend[:12] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name.split("/")[0] }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
+  <table class="bx" style="margin-top:4px; font-size:7pt"><tr><td class="b" style="width:40%">Bill No<br>Date<br>Type<br>Route<br>Due Date<br>Bill Disc</td>
+    <td class="b">: {{ doc.name.split("/")[0] }}<br>: {{ frappe.utils.formatdate(doc.posting_date, fmt) }}<br>: {{ "CASH" if cash else "CREDIT" }}<br>: {{ cu.area or "" }}<br>: {{ frappe.utils.formatdate(doc.due_date, fmt) if doc.due_date else "" }}<br>: </td></tr>
+    {%- if co.upi_qr -%}<tr><td colspan="2" class="c"><img src="{{ co.upi_qr }}" style="width:34%"></td></tr>{%- endif -%}</table>
   <table class="bx gy" style="margin-top:2px"><tr><td class="b">Net Amt : <span class="big">{{ "%.2f"|format(doc.rounded_total or doc.grand_total) }}</span></td></tr></table>
   <div style="margin-top:3px"><img src="__TAMIL_A__" style="width:98%"></div>
-  <div class="b" style="position:absolute; bottom:0; left:0; font-size:10pt">Party Signature with Seal</div>
+  <div class="b" style="position:absolute; bottom:0; left:0; font-size:8pt">Party Signature with Seal</div>
 </div>
 <div class="main">
 <table class="it">
- <colgroup><col style="width:3%"><col style="width:24%"><col style="width:5.5%"><col style="width:8%"><col style="width:6%"><col style="width:10%"><col style="width:5.5%"><col style="width:5%"><col style="width:4%"><col style="width:7%"><col style="width:7%"><col style="width:4%"><col style="width:4%"><col style="width:7%"></colgroup>
+ <colgroup><col style="width:3.5%"><col style="width:25%"><col style="width:5%"><col style="width:8%"><col style="width:5.5%"><col style="width:10%"><col style="width:5%"><col style="width:4.5%"><col style="width:4%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:4%"><col style="width:4%"><col style="width:8%"></colgroup>
  <thead>
   <tr><td colspan="14" style="padding:0">
    <table style="margin-bottom:2px"><tr>
-    <td class="bx gy" style="width:62%; padding:2px 4px"><table class="nb"><tr><td style="width:15mm"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5"><rect x="8" y="2" width="8" height="20" rx="2"/><rect x="2" y="8" width="20" height="8" rx="2"/></svg></td>
+    <td class="bx gy" style="width:58%; padding:2px 4px"><table class="nb"><tr><td style="width:12mm"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5"><rect x="8" y="2" width="8" height="20" rx="2"/><rect x="2" y="8" width="20" height="8" rx="2"/></svg></td>
       <td><span class="h">{{ co.company_name or doc.company }}</span><br>{{ (co.print_address or "")|replace("\\n", "<br>")|safe }}<br>{% if co.phone_no %}Phone : {{ co.phone_no }}<br>{% endif %}DL.No:{{ co.drug_licence_1 or "" }}{% if co.drug_licence_2 %} {{ co.drug_licence_2 }}{% endif %}<br>GSTIN : {{ doc.company_gstin or co.gstin or "" }}{% if co.fssai_no %} &nbsp; FSSAI : {{ co.fssai_no }}{% endif %}</td></tr></table></td>
     <td style="width:1%"></td>
-    <td class="bx" style="padding:0"><table class="nb" style="font-size:9.5pt"><tr><td class="h" colspan="2">{{ "CREDIT NOTE" if doc.is_return else "GST INVOICE" }}</td><td class="h" colspan="2">{{ "CASH BILL" if cash else "CREDIT BILL" }}</td></tr>
-      <tr><td class="b">Invoice No</td><td class="h">: {{ doc.name }}</td><td class="b">BILL TIME :</td><td>{{ (doc.posting_time|string)[:5] }}</td></tr>
+    <td class="bx" style="padding:0"><table class="nb" style="font-size:7pt"><tr><td class="h" colspan="2">{{ "CREDIT NOTE" if doc.is_return else "GST INVOICE" }}</td><td class="h" colspan="2">{{ "CASH BILL" if cash else "CREDIT BILL" }}</td></tr>
+      <tr><td class="b">Invoice No</td><td class="h">: {{ doc.name.split("/")[0] }}</td><td class="b">BILL TIME :</td><td>{{ (doc.posting_time|string)[:5] }}</td></tr>
       <tr><td class="b">Invoice Date</td><td class="b">: {{ frappe.utils.formatdate(doc.posting_date, fmt) }}</td><td class="b">GRN Date :</td><td>{{ frappe.utils.formatdate(doc.posting_date, fmt) }}</td></tr>
       <tr><td class="b">EWay Bill No</td><td>: {{ doc.get("ewaybill") or "" }}</td><td class="b">Due Date :</td><td>{{ frappe.utils.formatdate(doc.due_date, fmt) if doc.due_date else "" }}</td></tr>
       <tr><td class="b">Cases</td><td>: {{ doc.get("cases") or "" }}</td><td></td><td></td></tr>
@@ -100,20 +100,20 @@ PRINT_HTML = """
       <tr><td class="b">Transport</td><td>: {{ doc.get("transporter_name") or "" }}</td><td></td><td></td></tr></table></td>
    </tr></table>
    <table style="margin-bottom:2px"><tr>
-    <td class="bx" style="width:62%; padding:2px 4px"><table class="nb"><tr><td><span class="h" style="font-size:12pt">{{ doc.customer_name }}</span><br><b>{{ ad.t|replace("\\n", "<br>")|safe }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}</b><br><b>{% if cu.mobile_no %}Phone No : {{ cu.mobile_no }}<br>{% endif %}DL.No. : {{ cu.drug_licence_1 or "" }}{% if cu.drug_licence_2 %} {{ cu.drug_licence_2 }}{% endif %}{% if doc.billing_address_gstin %}<br>GSTIN : {{ doc.billing_address_gstin }}{% endif %}</b></td>
-      {%- if co.upi_qr -%}<td style="width:26mm" class="r"><img src="{{ co.upi_qr }}" style="width:25mm"></td>{%- endif -%}</tr></table></td>
+    <td class="bx" style="width:62%; padding:2px 4px"><table class="nb"><tr><td><span class="h" style="font-size:9pt">{{ doc.customer_name }}</span><br><b>{{ ad.t|replace("\\n", "<br>")|safe }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}</b><br><b>{% if cu.mobile_no %}Phone No : {{ cu.mobile_no }}<br>{% endif %}DL.No. : {{ cu.drug_licence_1 or "" }}{% if cu.drug_licence_2 %} {{ cu.drug_licence_2 }}{% endif %}{% if doc.billing_address_gstin %}<br>GSTIN : {{ doc.billing_address_gstin }}{% endif %}</b></td>
+      {%- if co.upi_qr -%}<td style="width:21mm" class="r"><img src="{{ co.upi_qr }}" style="width:20mm"></td>{%- endif -%}</tr></table></td>
     <td style="width:1%"></td>
-    <td class="bx" style="padding:2px 4px"><span class="u" style="font-size:10.5pt">Pending Bill Details &nbsp; OUTSTANDING: {{ "%.2f"|format(tot_due) }}</span>
-      <table class="nb" style="font-size:8.5pt"><tr><td class="u">Bill No</td><td class="u">Bill Date</td><td class="u r">Bill Amount</td><td class="u r">Outstanding</td></tr>
-      {%- for p in pend[:5] -%}<tr><td style="font-size:7.5pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name }}</td><td class="b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.grand_total) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
+    <td class="bx" style="padding:2px 4px"><span class="u" style="font-size:8pt">Pending Bill Details &nbsp; OUTSTANDING: {{ "%.2f"|format(tot_due) }}</span>
+      <table class="nb" style="font-size:6.8pt"><tr><td class="u">Bill No</td><td class="u">Bill Date</td><td class="u r">Bill Amount</td><td class="u r">Outstanding</td></tr>
+      {%- for p in pend[:5] -%}<tr><td style="font-size:6.3pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name.split("/")[0] }}</td><td class="b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.grand_total) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
       <span class="u">TOTAL BILLS DUE : {{ pend|length }}</span></td>
    </tr></table>
   </td></tr>
-  <tr class="it"><th style="width:3%">S.No</th><th style="width:24%">PARTICULARS</th><th style="width:5.5%">MFR</th><th style="width:8%">H.S.N</th><th style="width:6%">PACK</th><th style="width:10%">BATCH</th><th style="width:5.5%">E.D</th><th class="r" style="width:5%">QTY</th><th class="r" style="width:4%">F/R</th><th class="r" style="width:7%">M.R.P</th><th class="r" style="width:7%">RATE</th><th class="r" style="width:4%">DIS %</th><th class="r" style="width:4%">GST %</th><th class="r" style="width:7%">AMOUNT</th></tr>
+  <tr class="it"><th>S.No</th><th>PARTICULARS</th><th>MFR</th><th>H.S.N</th><th>PACK</th><th>BATCH</th><th>E.D</th><th class="r">QTY</th><th class="r">F/R</th><th class="r">M.R.P</th><th class="r">RATE</th><th class="r">DIS %</th><th class="r">GST %</th><th class="r">AMOUNT</th></tr>
  </thead>
  <tbody class="it">
   {%- for x in rows.l -%}
-  <tr{% if loop.last %} class="last"{% endif %}><td class="r">{{ loop.index }}</td><td>{{ x.name }}</td><td>{{ x.mfr }}</td><td>{{ x.hsn }}</td><td>{{ x.pack }}</td><td>{{ x.batch }}</td><td>{{ x.exp }}</td>
+  <tr{% if loop.last %} class="last"{% endif %}><td class="r">{{ loop.index }}</td><td class="nm">{{ x.name }}</td><td>{{ x.mfr }}</td><td>{{ x.hsn }}</td><td>{{ x.pack }}</td><td>{{ x.batch }}</td><td>{{ x.exp }}</td>
     <td class="r">{{ "%g"|format(x.qty) }}</td><td class="r">{{ "%g"|format(x.free) if x.free else "-" }}</td><td class="r">{{ x.mrp }}</td>
     <td class="r">{{ "%.2f"|format(x.rate) }}</td><td class="r">{{ "%.2f"|format(x.dis) if x.dis else "-" }}</td><td class="r">{{ "%.2f"|format(x.gst) if x.gst != "" else "" }}</td><td class="r">{{ "%.2f"|format(x.amt) }}</td></tr>
   {%- endfor -%}
@@ -146,7 +146,7 @@ PRINT_HTML = """
 </div>
 </div>
 </div>
-<div id="footer-html" class="visible-pdf"><div style="text-align:right; font-size:8pt; margin-right:22%">Page <span class="page"></span> of <span class="topage"></span></div></div>
+<div id="footer-html" class="visible-pdf"><div style="text-align:right; font-size:7pt; margin-right:22%">Page <span class="page"></span> of <span class="topage"></span></div></div>
 """
 
 REPORT_NAME = "Schedule Drug Sales Register"

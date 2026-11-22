@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Pay MM Pharma Distributors</title>
+<style>
+body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#f4f6fa;color:#10192b;display:grid;place-items:center;min-height:100vh}
+main{width:min(92vw,380px);background:#fff;border-radius:16px;padding:28px 24px;box-shadow:0 2px 14px rgba(16,25,43,.12);text-align:center}
+h1{font-size:18px;margin:0 0 4px}.m{color:#55627a;font-size:14px}.amt{font-size:40px;font-weight:700;margin:14px 0 2px}
+a.b{display:block;margin:20px 0 10px;padding:16px;border-radius:12px;background:#1c4fd8;color:#fff;font-weight:600;text-decoration:none;font-size:18px}
+button{width:100%;padding:12px;border:1.5px solid #c9d1e0;border-radius:12px;background:#fff;font-size:15px}
+.s{font-size:13px;color:#55627a;margin-top:14px}
+</style></head><body><main>
+<h1 id="n">MM PHARMA DISTRIBUTORS</h1><div class="m" id="t"></div>
+<div class="amt" id="a"></div>
+<a class="b" id="go" href="#">Pay with any UPI app</a>
+<button id="cp">Copy UPI ID</button>
+<div class="s" id="s">Opens GPay, PhonePe, Paytm or any UPI app on your phone.</div>
+</main><script>
+var p=new URLSearchParams(location.search),pa=p.get("pa")||"",pn=p.get("pn")||"MM PHARMA DISTRIBUTORS",am=p.get("am")||"",tn=p.get("tn")||"";
+var ok=/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(pa);
+document.getElementById("n").textContent=pn;document.getElementById("t").textContent=tn;
+if(!ok){document.getElementById("a").textContent="";document.getElementById("go").style.display="none";document.getElementById("cp").style.display="none";document.getElementById("s").textContent="This payment link is not valid. Please ask for a new bill."}
+else{
+ var q="pa="+encodeURIComponent(pa)+"&pn="+encodeURIComponent(pn)+(am?"&am="+encodeURIComponent(am):"")+"&cu=INR"+(tn?"&tn="+encodeURIComponent(tn):"");
+ var u="upi://pay?"+q;
+ if(am)document.getElementById("a").textContent="₹ "+Number(am).toLocaleString("en-IN",{minimumFractionDigits:2});
+ document.getElementById("go").href=u;
+ document.getElementById("cp").onclick=function(){var b=this;(navigator.clipboard?navigator.clipboard.writeText(pa):Promise.reject()).then(function(){b.textContent="Copied "+pa},function(){b.textContent=pa})};
+ setTimeout(function(){location.href=u},400);
+}
+</script></body></html>

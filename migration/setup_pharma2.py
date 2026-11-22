@@ -16,8 +16,11 @@ import frappe
 PRINT_NAME = "MM Pharma Tax Invoice"
 
 PRINT_HTML = """
-{%- set co = frappe.db.get_value("Company", doc.company, ["company_name","phone_no","drug_licence_1","drug_licence_2","fssai_no","gstin","bank_details_print","upi_qr"], as_dict=True) or {} -%}
+{%- set co = frappe.db.get_value("Company", doc.company, ["company_name","phone_no","drug_licence_1","drug_licence_2","fssai_no","gstin","bank_details_print","upi_qr","print_address"], as_dict=True) or {} -%}
 {%- set cu = frappe.db.get_value("Customer", doc.customer, ["drug_licence_1","drug_licence_2","mobile_no","area"], as_dict=True) or {} -%}
+{%- set ad = namespace(t="") -%}
+{%- if doc.address_display -%}{%- set ad.t = doc.address_display|striptags -%}
+{%- else -%}{%- for a in frappe.get_all("Address", filters=[["Dynamic Link", "link_name", "=", doc.customer], ["Dynamic Link", "link_doctype", "=", "Customer"]], fields=["address_line1", "address_line2", "city", "pincode"], limit_page_length=1) -%}{%- set ad.t = [a.address_line1, a.address_line2, a.city, a.pincode]|select|join("\\n") -%}{%- endfor -%}{%- endif -%}
 {%- set billed_by = frappe.db.get_value("User", doc.owner, "full_name") or doc.owner -%}
 {%- set pdc = namespace(v=0) -%}
 {%- for pe in frappe.get_all("Payment Entry", filters=[["party_type", "=", "Customer"], ["party", "=", doc.customer], ["docstatus", "=", 1], ["reference_date", ">", doc.posting_date], ["clearance_date", "is", "not set"]], fields=["paid_amount"]) -%}{%- set pdc.v = pdc.v + pe.paid_amount -%}{%- endfor -%}
@@ -49,11 +52,8 @@ PRINT_HTML = """
 {%- set pend = frappe.get_all("Sales Invoice", filters={"customer": doc.customer, "docstatus": 1, "outstanding_amount": [">", 0], "name": ["!=", doc.name]}, fields=["name", "posting_date", "due_date", "grand_total", "outstanding_amount"], order_by="posting_date asc", limit_page_length=500) -%}
 {%- set tot_due = pend|sum(attribute="outstanding_amount") -%}
 {%- set fmt = "dd-MM-yyyy" -%}
-<meta name="pdf-orientation" content="Landscape">
-<meta name="pdf-page-size" content="A4">
-<meta name="pdf-margin-top" content="4mm"><meta name="pdf-margin-bottom" content="9mm">
-<meta name="pdf-margin-left" content="5mm"><meta name="pdf-margin-right" content="5mm">
 <style>
+  .print-format {margin-top: 4mm; margin-bottom: 9mm; margin-left: 5mm; margin-right: 5mm; page-size: A4; orientation: Landscape;}
   .inv {font-family: "Times New Roman", Times, serif; font-size:9.5pt; color:#000; line-height:1.25;}
   .inv table {border-collapse:collapse; width:100%; table-layout:auto;} .inv table.it {table-layout:fixed;} .inv td, .inv th {padding:1px 3px; vertical-align:top;}
   .inv .main {margin-right:22%;} .inv .strip {position:fixed; top:0; bottom:0; right:0; width:21%;}
@@ -70,8 +70,8 @@ PRINT_HTML = """
 </style>
 <div class="inv">
 <div class="strip">
-  <table class="bx gy" style="margin-bottom:2px"><tr><td class="b" style="font-size:8.5pt">{{ co.company_name or doc.company }}<br>{{ (doc.company_address_display or "")|striptags|replace("\\n", ", ") }}</td></tr>
-  <tr><td class="b" style="font-size:8.5pt; border-top:1px solid #000">{{ doc.customer_name }}<br>{{ (doc.address_display or "")|striptags|replace("\\n", ", ") }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}<br>{{ cu.mobile_no or "" }}</td></tr></table>
+  <table class="bx gy" style="margin-bottom:2px"><tr><td class="b" style="font-size:8.5pt">{{ co.company_name or doc.company }}<br>{{ (co.print_address or "")|replace("\\n", ", ") }}</td></tr>
+  <tr><td class="b" style="font-size:8.5pt; border-top:1px solid #000">{{ doc.customer_name }}<br>{{ ad.t|replace("\\n", ", ") }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}<br>{{ cu.mobile_no or "" }}</td></tr></table>
   <div class="c u" style="font-size:11pt">Pending Bills</div>
   <table class="nb" style="font-size:8.5pt"><tr><td class="u">Bill No</td><td class="u c">Date</td><td class="u r">Balance</td></tr>
   {%- for p in pend[:16] -%}<tr><td style="font-size:7.5pt">{{ "*" if p.due_date and p.due_date < doc.posting_date else "" }}{{ p.name }}</td><td class="c b">{{ frappe.utils.formatdate(p.posting_date, fmt) }}</td><td class="r b">{{ "%.2f"|format(p.outstanding_amount) }}</td></tr>{%- endfor -%}</table>
@@ -89,7 +89,7 @@ PRINT_HTML = """
   <tr><td colspan="14" style="padding:0">
    <table style="margin-bottom:2px"><tr>
     <td class="bx gy" style="width:62%; padding:2px 4px"><table class="nb"><tr><td style="width:15mm"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5"><rect x="8" y="2" width="8" height="20" rx="2"/><rect x="2" y="8" width="20" height="8" rx="2"/></svg></td>
-      <td><span class="h">{{ co.company_name or doc.company }}</span><br>{{ (doc.company_address_display or "")|striptags|replace("\\n", "<br>")|safe }}<br>{% if co.phone_no %}Phone : {{ co.phone_no }}<br>{% endif %}DL.No:{{ co.drug_licence_1 or "" }}{% if co.drug_licence_2 %} {{ co.drug_licence_2 }}{% endif %}<br>GSTIN : {{ doc.company_gstin or co.gstin or "" }}{% if co.fssai_no %} &nbsp; FSSAI : {{ co.fssai_no }}{% endif %}</td></tr></table></td>
+      <td><span class="h">{{ co.company_name or doc.company }}</span><br>{{ (co.print_address or "")|replace("\\n", "<br>")|safe }}<br>{% if co.phone_no %}Phone : {{ co.phone_no }}<br>{% endif %}DL.No:{{ co.drug_licence_1 or "" }}{% if co.drug_licence_2 %} {{ co.drug_licence_2 }}{% endif %}<br>GSTIN : {{ doc.company_gstin or co.gstin or "" }}{% if co.fssai_no %} &nbsp; FSSAI : {{ co.fssai_no }}{% endif %}</td></tr></table></td>
     <td style="width:1%"></td>
     <td class="bx" style="padding:0"><table class="nb" style="font-size:9.5pt"><tr><td class="h" colspan="2">{{ "CREDIT NOTE" if doc.is_return else "GST INVOICE" }}</td><td class="h" colspan="2">{{ "CASH BILL" if cash else "CREDIT BILL" }}</td></tr>
       <tr><td class="b">Invoice No</td><td class="h">: {{ doc.name }}</td><td class="b">BILL TIME :</td><td>{{ (doc.posting_time|string)[:5] }}</td></tr>
@@ -100,7 +100,7 @@ PRINT_HTML = """
       <tr><td class="b">Transport</td><td>: {{ doc.get("transporter_name") or "" }}</td><td></td><td></td></tr></table></td>
    </tr></table>
    <table style="margin-bottom:2px"><tr>
-    <td class="bx" style="width:62%; padding:2px 4px"><table class="nb"><tr><td><span class="h" style="font-size:12pt">{{ doc.customer_name }}</span><br><b>{{ (doc.address_display or "")|striptags|replace("\\n", "<br>")|safe }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}</b><br><b>{% if cu.mobile_no %}Phone No : {{ cu.mobile_no }}<br>{% endif %}DL.No. : {{ cu.drug_licence_1 or "" }}{% if cu.drug_licence_2 %} {{ cu.drug_licence_2 }}{% endif %}{% if doc.billing_address_gstin %}<br>GSTIN : {{ doc.billing_address_gstin }}{% endif %}</b></td>
+    <td class="bx" style="width:62%; padding:2px 4px"><table class="nb"><tr><td><span class="h" style="font-size:12pt">{{ doc.customer_name }}</span><br><b>{{ ad.t|replace("\\n", "<br>")|safe }}{% if doc.place_of_supply %} State : {{ doc.place_of_supply[:2] }}{% endif %}</b><br><b>{% if cu.mobile_no %}Phone No : {{ cu.mobile_no }}<br>{% endif %}DL.No. : {{ cu.drug_licence_1 or "" }}{% if cu.drug_licence_2 %} {{ cu.drug_licence_2 }}{% endif %}{% if doc.billing_address_gstin %}<br>GSTIN : {{ doc.billing_address_gstin }}{% endif %}</b></td>
       {%- if co.upi_qr -%}<td style="width:26mm" class="r"><img src="{{ co.upi_qr }}" style="width:25mm"></td>{%- endif -%}</tr></table></td>
     <td style="width:1%"></td>
     <td class="bx" style="padding:2px 4px"><span class="u" style="font-size:10.5pt">Pending Bill Details &nbsp; OUTSTANDING: {{ "%.2f"|format(tot_due) }}</span>
@@ -172,13 +172,17 @@ ORDER BY si.posting_date, si.name
 """
 
 
-def custom_fields(bank, qr=""):
+def custom_fields(bank, qr="", addr="", phone=""):
     from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
     create_custom_fields({
         "Company": [dict(fieldname="bank_details_print", label="Bank details (printed on invoices)", fieldtype="Small Text", insert_after="fssai_no"),
+                    dict(fieldname="print_address", label="Address (printed on invoices)", fieldtype="Small Text", insert_after="upi_qr"),
                     dict(fieldname="upi_qr", label="UPI QR image (data URI, printed on invoices)", fieldtype="Long Text", insert_after="bank_details_print")],
         "Sales Invoice": [dict(fieldname="cases", label="Cases", fieldtype="Data", insert_after="due_date", print_hide=1)],
     }, update=True)
+    for c in frappe.get_all("Company", pluck="name"):
+        if addr: frappe.db.set_value("Company", c, "print_address", addr.replace("\\n", "\n"))
+        if phone: frappe.db.set_value("Company", c, "phone_no", phone)
     if qr:
         for c in frappe.get_all("Company", pluck="name"):
             frappe.db.set_value("Company", c, "upi_qr", "data:image/png;base64," + qr)
@@ -231,6 +235,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", required=True)
     ap.add_argument("--commit", action="store_true")
+    ap.add_argument("--company-address", default="")
+    ap.add_argument("--company-phone", default="")
     ap.add_argument("--upi-qr", default="", help="base64 PNG of the UPI QR")
     ap.add_argument("--bank", default="", help="bank lines printed on invoices; use \\n between lines")
     a = ap.parse_args()
@@ -238,7 +244,7 @@ def main():
     frappe.connect()
     frappe.set_user("Administrator")
     try:
-        print("custom fields"); custom_fields(a.bank, getattr(a, "upi_qr", ""))
+        print("custom fields"); custom_fields(a.bank, getattr(a, "upi_qr", ""), a.company_address, a.company_phone)
         print("print format"); print_format()
         print("register report"); register_report()
         if a.commit:

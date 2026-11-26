@@ -61,16 +61,33 @@ function quickActions() {
 }
 
 /* ---------- Stock ---------- */
-let stockMode = 'top';
+let stockMode = 'over';
+const coRow = c => `<div class="row tap" data-co="${esc(c.name)}" role="button"><div class="grow"><div class="t1">${esc(c.name)}</div><div class="t2">${c.n} items · ${num(c.q)} units</div></div><b>${cmp(c.v)}</b></div>`;
 on(/^\/stock$/, async () => {
-  view.innerHTML = `<label class="field s">${ic('search', 20)}<input id="s" placeholder="Search item, salt or company" autocomplete="off" enterkeyhint="search" aria-label="Search stock"></label>
-    <div class="chips" id="modes">${[['top', 'Top sellers'], ['low', 'Running low'], ['exp', 'Expiring']].map(([k, l]) => `<button class="chip ${stockMode === k ? 'on' : ''}" data-m="${k}">${l}</button>`).join('')}</div><div id="res">${skeleton(5)}</div>`;
+  view.innerHTML = `<label class="field s">${ic('search', 20)}<input id="s" placeholder="Search item, salt, company or batch" autocomplete="off" enterkeyhint="search" aria-label="Search stock"></label>
+    <div class="chips" id="modes">${[['over', 'Overview'], ['top', 'Top sellers'], ['low', 'Running low'], ['out', 'Out of stock'], ['exp', 'Expiring'], ['co', 'By company']].map(([k, l]) => `<button class="chip ${stockMode === k ? 'on' : ''}" data-m="${k}">${l}</button>`).join('')}</div><div id="res">${skeleton(5)}</div>`;
   const show = async () => {
     const v = $('#s').value.trim(), res = $('#res');
     try {
       if (v.length >= 2) {
-        const items = await searchItems(v), st = items.length ? await stockByItem(items.map(i => i.name)) : {};
-        res.innerHTML = items.length ? `<div class="sec">${items.map(i => stockRow(i.name, i.item_name, (i.salt_composition || '') + (i.drug_schedule ? '  Sch ' + i.drug_schedule : ''), st[i.name] ? st[i.name].q : 0)).join('')}</div>` : empty('No match', 'Try the salt name or the first letters of the item.');
+        const [items, batches] = await Promise.all([searchItems(v), searchBatches(v).catch(() => [])]), st = items.length ? await stockByItem(items.map(i => i.name)) : {};
+        const bh = batches.length ? `<div class="sec"><h2>Batch numbers</h2>${batches.map(b => `<div class="row tap" data-i="${esc(b.item)}"><div class="grow"><div class="t1">${esc(b.name)}</div><div class="t2">${esc(b.item_name || b.item)} · MRP ${inr(b.batch_mrp)}</div></div>${stamp(b.expiry_date)}<b class="nw" style="min-width:40px;text-align:right">${num(b.batch_qty)}</b></div>`).join('')}</div>` : '';
+        res.innerHTML = (items.length ? `<div class="sec">${items.map(i => stockRow(i.name, i.item_name, (i.salt_composition || '') + (i.drug_schedule ? '  Sch ' + i.drug_schedule : ''), st[i.name] ? st[i.name].q : 0)).join('')}</div>` : '') + bh || empty('No match', 'Try the salt name, the company, a batch number or the first letters of the item.');
+      } else if (stockMode === 'over') {
+        const [sm, prof, cs] = await Promise.all([stockSummary(), expiryProfile().catch(() => []), companyStock().catch(() => [])]), tot = prof.reduce((a, x) => a + x.v, 0) || 1;
+        res.innerHTML = `<section class="sec"><div class="pad"><div class="t2">Stock at cost (Stores)</div><div class="big">${cmp(sm.stores.v)}</div></div>
+          <div class="ld"><span>Items in stock</span><i></i><b>${num(sm.stores.n)}</b></div>
+          <div class="ld"><span>Units in stock</span><i></i><b>${num(sm.stores.q)}</b></div>
+          <div class="ld" style="padding-bottom:12px"><span>Expired stock room</span><i></i><b class="${sm.expired.v > 0 ? 'red' : ''}">${cmp(sm.expired.v)}</b></div></section>
+          ${prof.length ? `<section class="sec"><h2>When your stock expires</h2><div class="pad" style="padding-top:0"><div class="age" role="img" aria-label="Expiry profile">${prof.map((x, i) => x.v > 0 ? `<i class="a${4 - i}" style="flex:${x.v / tot}"></i>` : '').join('')}</div></div>${prof.map(x => `<div class="ld"><span>${x.l}</span><i></i><b>${cmp(x.v)} <span class="t2">· ${x.n} batches</span></b></div>`).join('')}<div style="height:8px"></div></section>` : ''}
+          ${cs.length ? `<section class="sec"><h2>Biggest companies by stock</h2>${cs.slice(0, 6).map(coRow).join('')}</section>` : ''}`;
+      } else if (stockMode === 'co') {
+        const cs = await companyStock();
+        res.innerHTML = cs.length ? `<div class="sec"><h2>Stock by company</h2>${cs.map(coRow).join('')}</div>` : empty('No stock', 'Nothing is in stock.');
+      } else if (stockMode === 'out') {
+        const sold = await sales30(), codes = Object.keys(sold), st = codes.length ? await stockByItem(codes) : {};
+        const r = codes.filter(c => !(st[c] && st[c].q > 0)).map(c => sold[c]).sort((a, b) => b.qty - a.qty).slice(0, 60);
+        res.innerHTML = r.length ? `<div class="sec"><h2>Sold recently, now out of stock</h2>${r.map(i => stockRow(i.code, i.name, num(i.qty) + ' sold in 30 days', 0)).join('')}</div>` : empty('Nothing out of stock', 'Items you bill appear here once they run out.');
       } else if (stockMode === 'top') {
         const sold = await sales30(), top = Object.values(sold).sort((a, b) => b.qty - a.qty).slice(0, 25), st = top.length ? await stockByItem(top.map(i => i.code)) : {};
         res.innerHTML = top.length ? `<div class="sec"><h2>Sold most in the last 30 days</h2>${top.map(i => stockRow(i.code, i.name, num(i.qty) + ' sold', st[i.code] ? st[i.code].q : 0)).join('')}</div>` : empty('No sales yet', 'Items you bill will appear here.');
@@ -81,7 +98,7 @@ on(/^\/stock$/, async () => {
         const r = (await expiryRows(90, 'Stores%')).slice(0, 80);
         res.innerHTML = r.length ? `<div class="sec"><h2>Expiring within 90 days</h2>${r.map(x => `<div class="row tap" data-i="${esc(x.item)}"><div class="grow"><div class="t1">${esc(x.item)}</div><div class="t2">${esc(x.batch)}</div></div>${stamp(x.expiry)}<b class="nw" style="min-width:40px;text-align:right">${num(x.qty)}</b></div>`).join('')}</div>` : empty('Nothing close to expiry', 'No batch expires in the next 90 days.');
       }
-      $$('#res .row').forEach(e => e.onclick = () => go('/item/' + encodeURIComponent(e.dataset.i)));
+      $$('#res .row').forEach(e => e.onclick = () => go(e.dataset.co ? '/company/' + encodeURIComponent(e.dataset.co) : '/item/' + encodeURIComponent(e.dataset.i)));
     } catch (e) { if (e.auth) return loginView(e.message); res.innerHTML = errBox(e); }
   };
   $('#s').oninput = debounce(show, 350);
@@ -91,13 +108,14 @@ on(/^\/stock$/, async () => {
 const stockRow = (code, name, sub, q) => `<div class="row tap" data-i="${esc(code)}" role="button"><div class="grow"><div class="t1">${esc(name)}</div><div class="t2">${esc(sub)}</div></div><div class="r"><b class="${q > 0 ? '' : 'red'}">${num(q)}</b><div class="t2">in stock</div></div></div>`;
 
 on(/^\/item\/(.+)$/, async code => {
-  const [it, bq, bd, pr, bin, sold] = await Promise.all([
+  const [it, bq, bd, pr, bin, sold, mv, pu] = await Promise.all([
     list('Item', { fields: ['name', 'item_name', 'stock_uom', 'salt_composition', 'manufacturer_company', 'drug_schedule', 'gst_hsn_code'], filters: [['name', '=', code]] }),
     method('erpnext.stock.doctype.batch.batch.get_batch_qty', { item_code: code }),
     list('Batch', { fields: ['name', 'expiry_date', 'batch_mrp'], filters: [['item', '=', code]], limit_page_length: 300 }),
     list('Item Price', { fields: ['price_list', 'price_list_rate', 'customer'], filters: [['item_code', '=', code], ['selling', '=', 1]], limit_page_length: 20 }),
-    stockByItem([code]), sales30().catch(() => ({})),
+    stockByItem([code]), sales30().catch(() => ({})), itemMoves(code).catch(() => []), itemPurchases(code).catch(() => []),
   ]);
+  const rooms = {}; (bq || []).filter(b => b.qty > 0).forEach(b => { const k = String(b.warehouse).replace(/ - \w+$/, ''); rooms[k] = (rooms[k] || 0) + b.qty; });
   const x = it[0]; setTitle(x.item_name);
   const meta = {}; bd.forEach(b => meta[b.name] = b);
   const rows = (bq || []).filter(b => b.qty > 0).map(b => ({ ...b, ...meta[b.batch_no] })).sort((a, b) => (a.expiry_date || '9999').localeCompare(b.expiry_date || '9999'));
@@ -111,9 +129,30 @@ on(/^\/item\/(.+)$/, async code => {
     ${cost ? `<div class="ld"><span>Average cost</span><i></i><b>${inr(cost)}</b></div>` : ''}
     ${cost && ptr ? `<div class="ld" style="padding-bottom:12px"><span>Margin at PTR</span><i></i><b class="${ptr.price_list_rate > cost ? 'green' : 'red'}">${((ptr.price_list_rate - cost) / ptr.price_list_rate * 100).toFixed(1)}%</b></div>` : '<div style="height:8px"></div>'}</section>
   <section class="sec"><h2>Batches, earliest expiry first</h2>${rows.map(r => `<div class="row"><div class="grow"><div class="t1">${esc(r.batch_no)}</div><div class="t2">MRP ${inr(r.batch_mrp)}${String(r.warehouse).startsWith('Expired') ? ' · expired stock room' : ''}</div></div>${stamp(r.expiry_date)}<b class="nw" style="min-width:44px;text-align:right">${num(r.qty)}</b></div>`).join('') || empty('No stock', 'This item has no batch with stock.')}</section>
+  ${Object.keys(rooms).length > 1 ? `<section class="sec"><h2>Where it is</h2>${Object.entries(rooms).map(([k, v]) => `<div class="ld"><span>${esc(k)}</span><i></i><b class="${/expired/i.test(k) ? 'red' : ''}">${num(v)}</b></div>`).join('')}<div style="height:8px"></div></section>` : ''}
+  ${mv.length ? `<section class="sec"><h2>Recent movement</h2>${mv.map(m => `<div class="row"><div class="grow"><div class="t1">${esc(m.voucher_type)} ${esc(m.voucher_no)}</div><div class="t2">${fmtDate(m.posting_date)} · ${esc(String(m.warehouse).replace(/ - \w+$/, ''))}</div></div><div class="r"><b class="${m.actual_qty < 0 ? 'red' : 'green'}">${m.actual_qty > 0 ? '+' : ''}${num(m.actual_qty)}</b><div class="t2">balance ${num(m.qty_after_transaction)}</div></div></div>`).join('')}</section>` : ''}
+  ${pu.length ? `<section class="sec"><h2>Bought from</h2>${pu.map(p => `<div class="row"><div class="grow"><div class="t1">${esc(p.supplier_name || '')}</div><div class="t2">${fmtDate(p.posting_date)} · ${num(p.qty)} at ${inr(p.rate)}</div></div></div>`).join('')}</section>` : ''}
   ${pr.length ? `<section class="sec"><h2>Selling rates</h2>${pr.map(p => `<div class="row"><div class="grow">${esc(p.price_list)}${p.customer ? `<div class="t2">${esc(p.customer)}</div>` : ''}</div><b>${inr(p.price_list_rate)}</b></div>`).join('')}</section>` : ''}
   <div class="acts"><button class="btn" id="add">${ic('plus', 20)}Add to order</button></div>`;
   $('#add').onclick = () => { order.pending = code; go('/order/new'); };
+}, { title: '' });
+
+on(/^\/company\/(.+)$/, async name => {
+  const [bins, co, exp] = await Promise.all([
+    list('Bin', { fields: ['item_code', 'actual_qty', 'stock_value'], filters: [['warehouse', 'like', 'Stores%'], ['actual_qty', '>', 0]], limit_page_length: 10000 }),
+    itemCompanies(), expiryRows(180, 'Stores%').catch(() => []),
+  ]);
+  setTitle(name);
+  const mine = bins.filter(b => (co[b.item_code] || NOCO) === name).sort((a, b) => b.stock_value - a.stock_value), ex = exp.filter(x => (co[x.item] || NOCO) === name);
+  const val = mine.reduce((a, b) => a + (b.stock_value || 0), 0), exv = ex.reduce((a, x) => a + (x.cost_value || 0), 0);
+  view.innerHTML = `<section class="sec"><div class="pad"><div class="t2">Stock at cost</div><div class="big">${cmp(val)}</div></div>
+    <div class="ld"><span>Items in stock</span><i></i><b>${mine.length}</b></div>
+    <div class="ld" style="padding-bottom:12px"><span>Expired or expiring in 6 months</span><i></i><b class="${exv > 0 ? 'amber' : ''}">${cmp(exv)}</b></div></section>
+    ${ex.length ? `<section class="sec"><h2>Expiring or expired</h2>${ex.slice(0, 40).map(x => `<div class="row tap" data-i="${esc(x.item)}"><div class="grow"><div class="t1">${esc(x.item)}</div><div class="t2">${esc(x.batch)} · cost ${inr0(x.cost_value)}</div></div>${stamp(x.expiry)}<b class="nw" style="min-width:40px;text-align:right">${num(x.qty)}</b></div>`).join('')}</section>` : ''}
+    <section class="sec"><h2>Items in stock</h2>${mine.slice(0, 120).map(b => stockRow(b.item_code, b.item_code, 'Worth ' + inr0(b.stock_value), b.actual_qty)).join('') || empty('No stock', 'Nothing from this company is in stock.')}</section>
+    <div class="acts"><a class="btn out" id="wa" href="#">${ic('share', 20)}Share list for ordering</a></div>`;
+  $$('[data-i]').forEach(e => e.onclick = () => go('/item/' + encodeURIComponent(e.dataset.i)));
+  $('#wa').href = waLink('', `${name}: stock as on ${fmtDate(today())}\n` + mine.slice(0, 40).map(b => `${b.item_code}: ${num(b.actual_qty)}`).join('\n') + (ex.length ? '\n\nExpiring or expired:\n' + ex.slice(0, 25).map(x => `${x.item} | ${x.batch} | ${x.expiry} | ${num(x.qty)}`).join('\n') : ''));
 }, { title: '' });
 
 /* ---------- Parties ---------- */
@@ -317,7 +356,7 @@ on(/^\/more$/, async () => {
   <section class="sec"><h2>Find and change</h2>${row('receipt', 'Sales bills', 'Search, edit, return, PDF, Excel, e-way bill', '/bills')}${row('cart', 'Purchase bills', 'Search, edit, return', '/purchases')}</section>
   <section class="sec"><h2>Create new</h2>${row('box', 'Item', 'With HSN, GST rate and salt', '/new/item')}${row('users', 'Customer', 'With address, GSTIN and licence', '/new/customer')}${row('truck', 'Supplier', 'With address and GSTIN', '/new/supplier')}${row('file', 'HSN code', '', '/new/hsn')}${row('pill', 'Salt', '', '/new/salt')}</section>
   <section class="sec"><h2>Reports</h2>${row('chart', 'All reports', 'Turnover, ledgers, books, GST, stock', '/rpt')}${row('chart', 'Sales and margin', 'By party, item, company and salesman', '/reports')}${row('rupee', 'Receivable aging', 'Who owes what, by how late', '/aging')}${row('truck', 'Payable to suppliers', 'What you owe', '/payables')}</section>
-  <section class="sec"><h2>Stock</h2>${row('cart', 'Reorder suggestions', 'Fast movers running low', '/reorder', low || '')}${row('clock', 'Expiry register', 'Expired and expiring batches', '/expiry/90')}${row('file', 'Schedule drug register', 'Schedule H, H1, X and narcotic sales', '/schedule')}</section>
+  <section class="sec"><h2>Stock</h2>${row('layers', 'Stock overview', 'Value, expiry profile, stock by company', '/stock')}${row('cart', 'Reorder suggestions', 'Fast movers running low', '/reorder', low || '')}${row('clock', 'Expiry register', 'Expired and expiring batches', '/expiry/90')}${row('file', 'Schedule drug register', 'Schedule H, H1, X and narcotic sales', '/schedule')}</section>
   <section class="sec"><h2>App</h2>${row('grid', 'Shortcuts', 'Choose the buttons shown on Home', '/shortcuts')}${row('lock', 'Settings', 'Theme, PIN lock, sign out', '/settings')}</section>
   <div class="pad t2" style="text-align:center">${esc(S.company || '')}<br>Signed in as ${esc(S.user || '')}</div>`;
   $$('[data-go]').forEach(e => e.onclick = () => go(e.dataset.go));
@@ -356,18 +395,27 @@ on(/^\/reorder$/, async () => {
   if ($('#wa')) $('#wa').href = waLink('', `Reorder list ${fmtDate(today())}\n` + r.slice(0, 40).map(i => `${i.name}: ${num(i.need)}`).join('\n'));
 }, { title: 'Reorder suggestions' });
 
-let expDays = 90;
+let expDays = 90, expGroup = false;
 on(/^\/expiry\/(\d+)$/, async d => {
   expDays = +d;
-  view.innerHTML = `<div class="chips" id="modes">${[[0, 'Expired'], [30, '30 days'], [60, '60 days'], [90, '90 days'], [180, '180 days']].map(([k, l]) => `<button class="chip ${expDays === k ? 'on' : ''}" data-d="${k}">${l}</button>`).join('')}</div>
+  view.innerHTML = `<div class="chips" id="modes">${[[0, 'Expired'], [30, '30 days'], [60, '60 days'], [90, '90 days'], [180, '180 days']].map(([k, l]) => `<button class="chip ${expDays === k ? 'on' : ''}" data-d="${k}">${l}</button>`).join('')}<button class="chip ${expGroup ? 'on' : ''}" id="grp">By company</button></div>
   <label class="field s">${ic('search', 20)}<input id="f" placeholder="Filter by item or batch" aria-label="Filter"></label><div id="res">${skeleton(5)}</div>`;
-  $$('#modes .chip').forEach(b => b.onclick = () => go('/expiry/' + b.dataset.d));
-  const rows = await expiryRows(expDays);
+  $$('#modes .chip[data-d]').forEach(b => b.onclick = () => go('/expiry/' + b.dataset.d));
+  const rows = await expiryRows(expDays), co = await itemCompanies().catch(() => ({}));
   const draw = () => {
     const f = $('#f').value.trim().toLowerCase(), r = rows.filter(x => !f || (x.item + ' ' + x.batch).toLowerCase().includes(f)), tot = r.reduce((a, x) => a + (x.cost_value || 0), 0);
-    $('#res').innerHTML = r.length ? `<div class="pad" style="padding-top:0"><span class="t2">${r.length} batches at cost</span> <b>${inr0(tot)}</b></div><section class="sec">${r.slice(0, 200).map(x => `<div class="row"><div class="grow"><div class="t1">${esc(x.item)}</div><div class="t2">${esc(x.batch)} · MRP ${inr(x.mrp)} · cost ${inr0(x.cost_value)}</div></div>${stamp(x.expiry)}<b class="nw" style="min-width:40px;text-align:right">${num(x.qty)}</b></div>`).join('')}</section><div class="acts"><a class="btn out" id="wa" href="#">${ic('share', 20)}Share for supplier return</a></div>` : empty('Nothing here', expDays ? `No batch expires within ${expDays} days.` : 'No expired stock.');
-    if ($('#wa')) $('#wa').href = waLink('', (expDays ? `Expiring within ${expDays} days` : 'Expired stock') + ` as on ${fmtDate(today())}\n` + r.slice(0, 40).map(x => `${x.item} | ${x.batch} | ${x.expiry} | ${num(x.qty)}`).join('\n'));
+    const line = x => `<div class="row"><div class="grow"><div class="t1">${esc(x.item)}</div><div class="t2">${esc(x.batch)} · MRP ${inr(x.mrp)} · cost ${inr0(x.cost_value)}</div></div>${stamp(x.expiry)}<b class="nw" style="min-width:40px;text-align:right">${num(x.qty)}</b></div>`;
+    const head = expDays ? `Expiring within ${expDays} days` : 'Expired stock', sum = xs => xs.reduce((s, x) => s + (x.cost_value || 0), 0), shareLines = xs => xs.slice(0, 40).map(x => `${x.item} | ${x.batch} | ${x.expiry} | ${num(x.qty)}`).join('\n');
+    let body;
+    if (expGroup) {
+      const g = {}; r.forEach(x => { const c = co[x.item] || NOCO; (g[c] || (g[c] = [])).push(x); });
+      body = Object.entries(g).sort((a, b) => sum(b[1]) - sum(a[1])).slice(0, 40).map(([c, xs]) => `<section class="sec"><h2>${esc(c)} · ${inr0(sum(xs))}</h2>${xs.slice(0, 30).map(line).join('')}<div class="acts"><a class="btn out wa-co" data-c="${esc(c)}" href="#">${ic('share', 20)}Share ${esc(c)} list</a></div></section>`).join('');
+    } else body = `<section class="sec">${r.slice(0, 200).map(line).join('')}</section><div class="acts"><a class="btn out" id="wa" href="#">${ic('share', 20)}Share for supplier return</a></div>`;
+    $('#res').innerHTML = r.length ? `<div class="pad" style="padding-top:0"><span class="t2">${r.length} batches at cost</span> <b>${inr0(tot)}</b></div>${body}` : empty('Nothing here', expDays ? `No batch expires within ${expDays} days.` : 'No expired stock.');
+    if ($('#wa')) $('#wa').href = waLink('', head + ` as on ${fmtDate(today())}\n` + shareLines(r));
+    $$('.wa-co').forEach(a => { a.href = waLink('', `${a.dataset.c}: ${head.toLowerCase()} as on ${fmtDate(today())}\n` + shareLines(r.filter(x => (co[x.item] || NOCO) === a.dataset.c))); });
   };
+  $('#grp').onclick = () => { expGroup = !expGroup; $('#grp').classList.toggle('on', expGroup); draw(); };
   $('#f').oninput = debounce(draw, 200); draw();
 }, { title: 'Expiry register' });
 

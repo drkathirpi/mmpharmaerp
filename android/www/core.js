@@ -228,7 +228,7 @@ function wireSteppers(root) { $$('[data-st]', root).forEach(b => b.onclick = () 
 function waLink(phone, text) { let p = String(phone || '').replace(/\D/g, ''); if (p.length === 10) p = '91' + p; return 'https://wa.me/' + p + '?text=' + encodeURIComponent(text); }
 
 /* ---------- data helpers (client-side aggregation; volumes are small) ---------- */
-const invoicesBetween = (a, b) => list('Sales Invoice', { fields: ['name', 'customer', 'customer_name', 'posting_date', 'base_grand_total', 'base_net_total'], filters: [['docstatus', '=', 1], ['posting_date', '>=', a], ['posting_date', '<=', b], ['is_return', '=', 0]], limit_page_length: 5000, order_by: 'posting_date asc' });
+const invoicesBetween = (a, b) => list('Sales Invoice', { fields: ['name', 'customer', 'customer_name', 'posting_date', 'base_grand_total', 'base_net_total'], filters: [['docstatus', '=', 1], ['posting_date', '>=', a], ['posting_date', '<=', b], ['is_return', '=', 0], ['is_opening', '=', 'No']], limit_page_length: 5000, order_by: 'posting_date asc' });
 async function invoiceLines(names) {
   const out = [];
   for (const c of chunk(names, 120)) out.push(...await list('Sales Invoice Item', { parent: 'Sales Invoice', fields: ['parent', 'item_code', 'item_name', 'qty', 'stock_qty', 'amount', 'base_net_amount', 'incoming_rate'], filters: [['parent', 'in', c]], limit_page_length: 20000 }));
@@ -261,6 +261,42 @@ async function reorderList() {
   }, 600000);
 }
 const searchItems = v => list('Item', { fields: ['name', 'item_name', 'stock_uom', 'salt_composition', 'manufacturer_company', 'drug_schedule'], filters: [['disabled', '=', 0]], limit_page_length: 25, order_by: 'item_name asc', or_filters: [['item_name', 'like', '%' + v + '%'], ['item_code', 'like', '%' + v + '%'], ['salt_composition', 'like', '%' + v + '%'], ['manufacturer_company', 'like', '%' + v + '%']] });
+/* ---------- stock helpers (read-only) ---------- */
+const searchBatches = v => list('Batch', { fields: ['name', 'item', 'item_name', 'expiry_date', 'batch_mrp', 'batch_qty'], filters: [['name', 'like', '%' + v + '%']], limit_page_length: 12, order_by: 'expiry_date asc' });
+const stockSummary = () => memo('stsum', async () => {
+  const f = wh => list('Bin', { fields: ['sum(stock_value) as v', 'sum(actual_qty) as q', 'count(name) as n'], filters: [['warehouse', 'like', wh], ['actual_qty', '>', 0]], limit_page_length: 1 }).then(r => r[0] || { v: 0, q: 0, n: 0 });
+  const [st, ex] = await Promise.all([f('Stores%'), f('Expired%')]);
+  return { stores: st, expired: ex };
+}, 300000);
+const EXP_PROFILE = ['Expired', 'Under 3 months', '3 to 6 months', '6 to 12 months', 'Over 1 year'];
+async function expiryProfile() {
+  const rows = await expiryRows(3650, 'Stores%'), b = EXP_PROFILE.map(l => ({ l, v: 0, n: 0 }));
+  rows.forEach(x => { const d = x.days_left, i = d < 0 ? 0 : d < 90 ? 1 : d < 180 ? 2 : d < 365 ? 3 : 4; b[i].v += x.cost_value || 0; b[i].n++; });
+  return b;
+}
+const NOCO = 'Company not set';
+async function itemCompanies() {
+  return memo('itco', async () => {
+    const its = await list('Item', { fields: ['name', 'manufacturer_company'], filters: [['disabled', '=', 0]], limit_page_length: 10000 }), m = {};
+    its.forEach(i => m[i.name] = (i.manufacturer_company || '').trim() || NOCO);
+    return m;
+  }, 600000);
+}
+async function companyStock() {
+  return memo('costock', async () => {
+    const [bins, co] = await Promise.all([list('Bin', { fields: ['item_code', 'actual_qty', 'stock_value'], filters: [['warehouse', 'like', 'Stores%'], ['actual_qty', '>', 0]], limit_page_length: 10000 }), itemCompanies()]);
+    const g = {};
+    bins.forEach(b => { const c = co[b.item_code] || NOCO, o = g[c] || (g[c] = { name: c, v: 0, q: 0, n: 0 }); o.v += b.stock_value || 0; o.q += b.actual_qty || 0; o.n++; });
+    return Object.values(g).sort((a, b) => b.v - a.v);
+  }, 300000);
+}
+const itemMoves = code => list('Stock Ledger Entry', { fields: ['posting_date', 'voucher_type', 'voucher_no', 'actual_qty', 'qty_after_transaction', 'warehouse'], filters: [['item_code', '=', code], ['is_cancelled', '=', 0]], order_by: 'posting_date desc, posting_time desc, creation desc', limit_page_length: 15 });
+async function itemPurchases(code) {
+  const ls = await list('Purchase Invoice Item', { parent: 'Purchase Invoice', fields: ['parent', 'qty', 'rate'], filters: [['item_code', '=', code], ['docstatus', '=', 1]], order_by: 'creation desc', limit_page_length: 6 });
+  if (!ls.length) return [];
+  const pi = await list('Purchase Invoice', { fields: ['name', 'supplier_name', 'posting_date'], filters: [['name', 'in', ls.map(l => l.parent)]], limit_page_length: 10 });
+  return ls.map(l => ({ ...l, ...(pi.find(p => p.name === l.parent) || {}) }));
+}
 async function lastSoldRate(customer, item) {
   const inv = await list('Sales Invoice', { fields: ['name', 'posting_date'], filters: [['customer', '=', customer], ['docstatus', '=', 1]], order_by: 'posting_date desc', limit_page_length: 40 });
   if (!inv.length) return null;

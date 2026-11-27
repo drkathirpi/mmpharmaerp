@@ -168,7 +168,7 @@ async function edLine(l, idx) {
       } catch (e) { /* defaults */ }
     }
     const sellRate = b => b && b.pr ? +(b.pr * (1 + margin / 100)).toFixed(2) : 0;
-    const infoHtml = b => !mk ? '' : `<div class="t2" style="line-height:1.6;padding:6px 0"><b>Pur ${b && b.pr ? inr(b.pr) : '-'}</b> · Cost ${b && b.cp ? inr(b.cp) : '-'} · MRP ${b && b.mrp ? inr(b.mrp) : '-'}${b && b.pr ? ` · Sell ${inr(sellRate(b))} (+${num(margin)}%)` : ''}<br>Margin on cost ${b && b.cp && b.pr ? num((sellRate(b) - b.cp) / sellRate(b) * 100) + '%' : '-'} · Exp ${b ? monthTxt(b.exp) || '-' : '-'}<br>${esc(it.manufacturer_company || '')}${it.salt_composition ? ' · ' + esc(it.salt_composition) : ''}<br>HSN ${esc(it.gst_hsn_code || '-')}${it.drug_schedule ? ' · Schedule ' + esc(it.drug_schedule) : ''}</div>`;
+    const infoHtml = b => !mk ? '' : `<div class="t2" style="line-height:1.6;padding:6px 0"><b>Pur ${b && b.pr ? inr(b.pr) : '-'}</b> · Cost ${b && b.cp ? inr(b.cp) : '-'} · MRP ${b && b.mrp ? inr(b.mrp) : '-'}${b && b.pr ? ` · Sell ${inr(sellRate(b))} (+${num(margin)}%)` : ''}<br>Margin on cost ${b && b.cp && b.pr ? num((sellRate(b) - b.cp) / b.cp * 100) + '%' : '-'} · Exp ${b ? monthTxt(b.exp) || '-' : '-'}<br>${esc(it.manufacturer_company || '')}${it.salt_composition ? ' · ' + esc(it.salt_composition) : ''}<br>HSN ${esc(it.gst_hsn_code || '-')}${it.drug_schedule ? ' · Schedule ' + esc(it.drug_schedule) : ''}</div>`;
     if (mk && !rate && sel && sel.pr) { rate = sellRate(sel); hint = `Purchase rate ${inr(sel.pr)} + ${num(margin)}% margin.`; }
     if (!rate) {
       try {

@@ -176,7 +176,7 @@ async function edLine(l, idx) {
         else { const lp = await list('Purchase Invoice Item', { parent: 'Purchase Invoice', fields: ['rate', 'parent'], filters: [['item_code', '=', l.item_code], ['docstatus', '=', 1]], order_by: 'creation desc', limit_page_length: 1 }); if (lp.length) { rate = lp[0].rate; hint = `Last bought at ${inr(rate)}.`; } }
       } catch (e) { /* manual */ }
     }
-    $('#lb', root).innerHTML = `${pickBatch ? `<div class="cap">Batch ${sales && !E.ret ? '(earliest expiry first)' : ''}</div><div id="bl">${batches.length ? batches.map(b => `<div class="row tap bsel ${sel && sel.id === b.id ? 'on' : ''}" data-b="${esc(b.id)}"><div class="grow"><div class="t1">${esc(b.id)}</div><div class="t2">Exp ${monthTxt(b.exp) || '-'} · MRP ${inr(b.mrp)}${mk && b.pr ? ` · Pur ${inr(b.pr)} · Sell ${inr(sellRate(b))}` : ''}</div></div>${b.qty ? `<b>${num(b.qty)}</b>` : ''}</div>`).join('') : empty('No stock in this batch list', E.ret && sales ? 'Type the batch below.' : 'Nothing available to pick here.')}</div>${E.ret && sales ? fld('bx', 'Or type a batch no', '', 'text') : ''}`
+    $('#lb', root).innerHTML = `${pickBatch ? `<div class="cap">Batch ${sales && !E.ret ? '(earliest expiry first)' : ''}</div>${mk && batches.length > 1 ? '<div class="pad t2" style="padding-top:0">To sell from more than one batch, type a quantity on each batch. Each becomes its own line on the bill.</div>' : ''}<div id="bl">${batches.length ? batches.map(b => `<div class="row tap bsel ${sel && sel.id === b.id ? 'on' : ''}" data-b="${esc(b.id)}"><div class="grow"><div class="t1">${esc(b.id)}</div><div class="t2">Exp ${monthTxt(b.exp) || '-'} · MRP ${inr(b.mrp)}${mk && b.pr ? ` · Pur ${inr(b.pr)} · Sell ${inr(sellRate(b))}` : ''}</div></div>${b.qty ? `<b>${num(b.qty)}</b>` : ''}${mk ? `<input class="bq" type="number" inputmode="decimal" min="0" data-b="${esc(b.id)}" placeholder="qty" aria-label="Quantity from batch ${esc(b.id)}" style="width:64px;margin-left:10px;text-align:right;padding:6px;border:1px solid var(--line,#ccc);border-radius:8px;background:transparent;color:inherit">` : ''}</div>`).join('') : empty('No stock in this batch list', E.ret && sales ? 'Type the batch below.' : 'Nothing available to pick here.')}</div>${E.ret && sales ? fld('bx', 'Or type a batch no', '', 'text') : ''}`
       : `${fld('bx', 'Batch no', l.batch_no || '', 'text', { req: 1, list: known.map(b => b.name) })}${fld('ex', 'Expiry (month)', l.expiry ? l.expiry.slice(0, 7) : '', 'month', { req: 1 })}${fld('mr', 'MRP', l.mrp || '', 'num')}`}
       <div id="inf">${infoHtml(sel)}</div>
       <div class="pad" style="display:flex;gap:12px;align-items:center;justify-content:space-between"><span>Quantity</span>${stepper('qy', l.qty || 1)}</div>
@@ -190,8 +190,20 @@ async function edLine(l, idx) {
       const cb = batches.find(x => x.id === chosen);
       if (mk && cb) { $('#inf', root).innerHTML = infoHtml(cb); if (cb.pr) { $('#rt', root).value = sellRate(cb); $('#ht', root).textContent = `Purchase rate ${inr(cb.pr)} + ${num(margin)}% margin.`; } }
     });
+    $$('.bq', root).forEach(i => { i.onclick = ev => ev.stopPropagation(); });
     if (!pickBatch && known.length) { const k = $('#bx', root); k.onchange = () => { const m = known.find(b => b.name === k.value); if (m) { $('#ex', root).value = (m.expiry_date || '').slice(0, 7); $('#mr', root).value = m.batch_mrp || ''; } }; }
     $('#ok', root).onclick = async () => {
+      // several batches: one bill line per batch with a quantity typed against it
+      const multi = mk ? $$('.bq', root).map(i => ({ b: batches.find(x => x.id === i.dataset.b), q: +i.value || 0 })).filter(x => x.b && x.q > 0) : [];
+      if (multi.length) {
+        const free0 = numv('fr', root), dc0 = numv('dc', root), r0 = numv('rt', root);
+        const over = multi.find((x, n) => x.q + (n === 0 ? free0 : 0) > x.b.qty + 0.0001);
+        if (over) return toast(`Only ${num(over.b.qty)} in batch ${over.b.id}`);
+        const lines = multi.map((x, n) => ({ ...l, batch_no: x.b.id, qty: x.q, free: n === 0 ? free0 : 0, rate: x.b.pr ? sellRate(x.b) : r0, disc: dc0, expiry: x.b.exp, mrp: x.b.mrp }));
+        if (idx >= 0) E.items.splice(idx, 1, ...lines); else E.items.push(...lines);
+        hideSheet(); history.back(); setTimeout(edScreen, 60);
+        return;
+      }
       const qty = numv('qy', root), free = numv('fr', root), r = numv('rt', root), dc = numv('dc', root); if (qty <= 0) return toast('Enter a quantity');
       let bno = chosen, exp = '', mrp = 0;
       if (E.ret && sales && val('bx', root)) bno = val('bx', root);

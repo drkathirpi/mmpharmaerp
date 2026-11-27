@@ -68,8 +68,8 @@ async function ensureBatch(item, id, expiry, mrp) {
 const batchesOf = async (item, wh) => {
   const bq = await method('erpnext.stock.doctype.batch.batch.get_batch_qty', { item_code: item, warehouse: wh });
   const ids = (bq || []).filter(b => b.qty > 0.0001).map(b => b.batch_no); if (!ids.length) return [];
-  const meta = await list('Batch', { fields: ['name', 'expiry_date', 'batch_mrp'], filters: [['name', 'in', ids]], limit_page_length: 200 });
-  return bq.filter(b => b.qty > 0.0001).map(b => { const m = meta.find(x => x.name === b.batch_no) || {}; return { id: b.batch_no, qty: b.qty, exp: b.expiry_date || m.expiry_date, mrp: m.batch_mrp }; }).sort((a, b) => (a.exp || '9999') < (b.exp || '9999') ? -1 : 1);
+  const meta = await list('Batch', { fields: ['name', 'expiry_date', 'batch_mrp', 'purchase_rate', 'cost_price'], filters: [['name', 'in', ids]], limit_page_length: 200 });
+  return bq.filter(b => b.qty > 0.0001).map(b => { const m = meta.find(x => x.name === b.batch_no) || {}; return { id: b.batch_no, qty: b.qty, exp: b.expiry_date || m.expiry_date, mrp: m.batch_mrp, pr: m.purchase_rate || 0, cp: m.cost_price || 0 }; }).sort((a, b) => (a.exp || '9999') < (b.exp || '9999') ? -1 : 1);
 };
 const monthTxt = e => e ? String(new Date(e + 'T00:00:00').getMonth() + 1).padStart(2, '0') + '/' + String(e).slice(2, 4) : '';
 
@@ -159,21 +159,37 @@ async function edLine(l, idx) {
     const sel = batches.find(b => b.id === l.batch_no) || batches[0];
     const known = !pickBatch ? await list('Batch', { fields: ['name', 'expiry_date', 'batch_mrp'], filters: [['item', '=', l.item_code]], order_by: 'creation desc', limit_page_length: 20 }) : [];
     let rate = l.rate, hint = '';
+    const mk = sales && !E.ret;   // Marg-style: rate = batch purchase rate + customer margin %
+    let margin = 20, it = {};
+    if (mk) {
+      try {
+        const [cu, ii] = await Promise.all([E.party ? list('Customer', { fields: ['default_margin_percent'], filters: [['name', '=', E.party.name]] }) : [], list('Item', { fields: ['manufacturer_company', 'salt_composition', 'gst_hsn_code', 'drug_schedule'], filters: [['name', '=', l.item_code]] })]);
+        if (cu[0] && cu[0].default_margin_percent != null) margin = +cu[0].default_margin_percent; it = ii[0] || {};
+      } catch (e) { /* defaults */ }
+    }
+    const sellRate = b => b && b.pr ? +(b.pr * (1 + margin / 100)).toFixed(2) : 0;
+    const infoHtml = b => !mk ? '' : `<div class="t2" style="line-height:1.6;padding:6px 0"><b>Pur ${b && b.pr ? inr(b.pr) : '-'}</b> · Cost ${b && b.cp ? inr(b.cp) : '-'} · MRP ${b && b.mrp ? inr(b.mrp) : '-'}${b && b.pr ? ` · Sell ${inr(sellRate(b))} (+${num(margin)}%)` : ''}<br>Margin on cost ${b && b.cp && b.pr ? num((sellRate(b) - b.cp) / sellRate(b) * 100) + '%' : '-'} · Exp ${b ? monthTxt(b.exp) || '-' : '-'}<br>${esc(it.manufacturer_company || '')}${it.salt_composition ? ' · ' + esc(it.salt_composition) : ''}<br>HSN ${esc(it.gst_hsn_code || '-')}${it.drug_schedule ? ' · Schedule ' + esc(it.drug_schedule) : ''}</div>`;
+    if (mk && !rate && sel && sel.pr) { rate = sellRate(sel); hint = `Purchase rate ${inr(sel.pr)} + ${num(margin)}% margin.`; }
     if (!rate) {
       try {
         if (sales) { const [rd, last] = await Promise.all([method('erpnext.stock.get_item_details.get_item_details', { args: { item_code: l.item_code, customer: E.party && E.party.name, company: S.company, doctype: 'Sales Invoice', currency: 'INR', price_list: 'Standard Selling', plc_conversion_rate: 1, conversion_rate: 1, qty: 1, transaction_date: today(), ignore_pricing_rule: 1 } }).catch(() => ({})), E.party ? lastSoldRate(E.party.name, l.item_code).catch(() => null) : null]); rate = (last && last.rate) || rd.price_list_rate || rd.rate || 0; hint = last ? `Last sold to this party at ${inr(last.rate)} on ${fmtDate(last.date)}.` : (rd.rate ? `List rate ${inr(rd.rate)}.` : 'No rate set for this item.'); }
         else { const lp = await list('Purchase Invoice Item', { parent: 'Purchase Invoice', fields: ['rate', 'parent'], filters: [['item_code', '=', l.item_code], ['docstatus', '=', 1]], order_by: 'creation desc', limit_page_length: 1 }); if (lp.length) { rate = lp[0].rate; hint = `Last bought at ${inr(rate)}.`; } }
       } catch (e) { /* manual */ }
     }
-    $('#lb', root).innerHTML = `${pickBatch ? `<div class="cap">Batch ${sales && !E.ret ? '(earliest expiry first)' : ''}</div><div id="bl">${batches.length ? batches.map(b => `<div class="row tap bsel ${sel && sel.id === b.id ? 'on' : ''}" data-b="${esc(b.id)}"><div class="grow"><div class="t1">${esc(b.id)}</div><div class="t2">Exp ${monthTxt(b.exp) || '-'} · MRP ${inr(b.mrp)}</div></div>${b.qty ? `<b>${num(b.qty)}</b>` : ''}</div>`).join('') : empty('No stock in this batch list', E.ret && sales ? 'Type the batch below.' : 'Nothing available to pick here.')}</div>${E.ret && sales ? fld('bx', 'Or type a batch no', '', 'text') : ''}`
+    $('#lb', root).innerHTML = `${pickBatch ? `<div class="cap">Batch ${sales && !E.ret ? '(earliest expiry first)' : ''}</div><div id="bl">${batches.length ? batches.map(b => `<div class="row tap bsel ${sel && sel.id === b.id ? 'on' : ''}" data-b="${esc(b.id)}"><div class="grow"><div class="t1">${esc(b.id)}</div><div class="t2">Exp ${monthTxt(b.exp) || '-'} · MRP ${inr(b.mrp)}${mk && b.pr ? ` · Pur ${inr(b.pr)} · Sell ${inr(sellRate(b))}` : ''}</div></div>${b.qty ? `<b>${num(b.qty)}</b>` : ''}</div>`).join('') : empty('No stock in this batch list', E.ret && sales ? 'Type the batch below.' : 'Nothing available to pick here.')}</div>${E.ret && sales ? fld('bx', 'Or type a batch no', '', 'text') : ''}`
       : `${fld('bx', 'Batch no', l.batch_no || '', 'text', { req: 1, list: known.map(b => b.name) })}${fld('ex', 'Expiry (month)', l.expiry ? l.expiry.slice(0, 7) : '', 'month', { req: 1 })}${fld('mr', 'MRP', l.mrp || '', 'num')}`}
+      <div id="inf">${infoHtml(sel)}</div>
       <div class="pad" style="display:flex;gap:12px;align-items:center;justify-content:space-between"><span>Quantity</span>${stepper('qy', l.qty || 1)}</div>
       <div class="pad" style="display:flex;gap:12px;align-items:center;justify-content:space-between"><span>Free quantity</span>${stepper('fr', l.free || 0)}</div>
       ${fld('rt', purchase ? 'Purchase rate' : 'Rate', rate || '', 'num')}${fld('dc', 'Discount %', l.disc || '', 'num')}
       <div class="pad t2" id="ht" style="padding-top:0">${esc(hint)}</div><div class="acts"><button class="btn" id="ok">${idx >= 0 ? 'Update item' : 'Add to bill'}</button></div>`;
     wireSteppers(root);
     let chosen = sel ? sel.id : '';
-    $$('.bsel', root).forEach(e => e.onclick = () => { chosen = e.dataset.b; $$('.bsel', root).forEach(x => x.classList.toggle('on', x === e)); });
+    $$('.bsel', root).forEach(e => e.onclick = () => {
+      chosen = e.dataset.b; $$('.bsel', root).forEach(x => x.classList.toggle('on', x === e));
+      const cb = batches.find(x => x.id === chosen);
+      if (mk && cb) { $('#inf', root).innerHTML = infoHtml(cb); if (cb.pr) { $('#rt', root).value = sellRate(cb); $('#ht', root).textContent = `Purchase rate ${inr(cb.pr)} + ${num(margin)}% margin.`; } }
+    });
     if (!pickBatch && known.length) { const k = $('#bx', root); k.onchange = () => { const m = known.find(b => b.name === k.value); if (m) { $('#ex', root).value = (m.expiry_date || '').slice(0, 7); $('#mr', root).value = m.batch_mrp || ''; } }; }
     $('#ok', root).onclick = async () => {
       const qty = numv('qy', root), free = numv('fr', root), r = numv('rt', root), dc = numv('dc', root); if (qty <= 0) return toast('Enter a quantity');

@@ -70,9 +70,10 @@ on(/^\/stock$/, async () => {
     const v = $('#s').value.trim(), res = $('#res');
     try {
       if (v.length >= 2) {
-        const [items, batches] = await Promise.all([searchItems(v), searchBatches(v).catch(() => [])]), st = items.length ? await stockByItem(items.map(i => i.name)) : {};
+        const [items, batches, salts] = await Promise.all([searchItems(v), searchBatches(v).catch(() => []), list('Salt', { fields: ['name'], filters: [['name', 'like', '%' + v + '%']], limit_page_length: 6 }).catch(() => [])]), st = items.length ? await stockByItem(items.map(i => i.name)) : {};
+        const sh = salts.length ? `<div class="sec"><h2>Salts (tap for all products)</h2>${salts.map(s => `<div class="row tap" data-sl="${esc(s.name)}"><div class="grow"><div class="t1">${esc(s.name)}</div></div></div>`).join('')}</div>` : '';
         const bh = batches.length ? `<div class="sec"><h2>Batch numbers</h2>${batches.map(b => `<div class="row tap" data-i="${esc(b.item)}"><div class="grow"><div class="t1">${esc(b.name)}</div><div class="t2">${esc(b.item_name || b.item)} · MRP ${inr(b.batch_mrp)}</div></div>${stamp(b.expiry_date)}<b class="nw" style="min-width:40px;text-align:right">${num(b.batch_qty)}</b></div>`).join('')}</div>` : '';
-        res.innerHTML = (items.length ? `<div class="sec">${items.map(i => stockRow(i.name, i.item_name, (i.salt_composition || '') + (i.drug_schedule ? '  Sch ' + i.drug_schedule : ''), st[i.name] ? st[i.name].q : 0)).join('')}</div>` : '') + bh || empty('No match', 'Try the salt name, the company, a batch number or the first letters of the item.');
+        res.innerHTML = sh + (items.length ? `<div class="sec">${items.map(i => stockRow(i.name, i.item_name, (i.salt_composition || '') + (i.drug_schedule ? '  Sch ' + i.drug_schedule : ''), st[i.name] ? st[i.name].q : 0)).join('')}</div>` : '') + bh || empty('No match', 'Try the salt name, the company, a batch number or the first letters of the item.');
       } else if (stockMode === 'over') {
         const [sm, prof, cs] = await Promise.all([stockSummary(), expiryProfile().catch(() => []), companyStock().catch(() => [])]), tot = prof.reduce((a, x) => a + x.v, 0) || 1;
         res.innerHTML = `<section class="sec"><div class="pad"><div class="t2">Stock at cost (Stores)</div><div class="big">${cmp(sm.stores.v)}</div></div>
@@ -98,7 +99,7 @@ on(/^\/stock$/, async () => {
         const r = (await expiryRows(90, 'Stores%')).slice(0, 80);
         res.innerHTML = r.length ? `<div class="sec"><h2>Expiring within 90 days</h2>${r.map(x => `<div class="row tap" data-i="${esc(x.item)}"><div class="grow"><div class="t1">${esc(x.item)}</div><div class="t2">${esc(x.batch)}</div></div>${stamp(x.expiry)}<b class="nw" style="min-width:40px;text-align:right">${num(x.qty)}</b></div>`).join('')}</div>` : empty('Nothing close to expiry', 'No batch expires in the next 90 days.');
       }
-      $$('#res .row').forEach(e => e.onclick = () => go(e.dataset.co ? '/company/' + encodeURIComponent(e.dataset.co) : '/item/' + encodeURIComponent(e.dataset.i)));
+      $$('#res .row').forEach(e => e.onclick = () => go(e.dataset.sl ? '/salt/' + encodeURIComponent(e.dataset.sl) : e.dataset.co ? '/company/' + encodeURIComponent(e.dataset.co) : '/item/' + encodeURIComponent(e.dataset.i)));
     } catch (e) { if (e.auth) return loginView(e.message); res.innerHTML = errBox(e); }
   };
   $('#s').oninput = debounce(show, 350);
@@ -122,7 +123,7 @@ on(/^\/item\/(.+)$/, async code => {
   const ok = rows.filter(r => !String(r.warehouse).startsWith('Expired')), tot = ok.reduce((a, r) => a + r.qty, 0);
   const s30 = sold[code] ? sold[code].qty : 0, cover = s30 > 0 ? Math.floor(tot / (s30 / 30)) : null, cost = bin[code] ? bin[code].v : 0;
   const ptr = pr.find(p => /ptr/i.test(p.price_list) && !p.customer);
-  view.innerHTML = `<div class="pad" style="padding-top:0"><div class="t2">${esc(x.salt_composition || 'Composition not set')}</div><div class="t2">${esc(x.manufacturer_company || '')}${x.gst_hsn_code ? ' · HSN ' + esc(x.gst_hsn_code) : ''}${x.drug_schedule ? ' · Schedule ' + esc(x.drug_schedule) : ''}</div></div>
+  view.innerHTML = `<div class="pad" style="padding-top:0"><div class="t2">${x.salt_composition ? `<a href="#" id="saltlink">${esc(x.salt_composition)}</a> (tap: all products with this salt)` : 'Composition not set'}</div><div class="t2">${esc(x.manufacturer_company || '')}${x.gst_hsn_code ? ' · HSN ' + esc(x.gst_hsn_code) : ''}${x.drug_schedule ? ' · Schedule ' + esc(x.drug_schedule) : ''}</div></div>
   <section class="sec"><div class="ld" style="padding-top:12px"><span>In stock</span><i></i><b class="${tot > 0 ? '' : 'red'}">${num(tot)} ${esc(x.stock_uom)}</b></div>
     <div class="ld"><span>Sold in 30 days</span><i></i><b>${num(s30)}</b></div>
     <div class="ld"><span>Stock will last</span><i></i><b class="${cover !== null && cover < 15 ? 'amber' : ''}">${cover === null ? 'no recent sales' : cover + ' days'}</b></div>
@@ -135,6 +136,7 @@ on(/^\/item\/(.+)$/, async code => {
   ${pr.length ? `<section class="sec"><h2>Selling rates</h2>${pr.map(p => `<div class="row"><div class="grow">${esc(p.price_list)}${p.customer ? `<div class="t2">${esc(p.customer)}</div>` : ''}</div><b>${inr(p.price_list_rate)}</b></div>`).join('')}</section>` : ''}
   <div class="acts"><button class="btn" id="add">${ic('plus', 20)}Add to order</button></div>`;
   $('#add').onclick = () => { order.pending = code; go('/order/new'); };
+  if ($('#saltlink')) $('#saltlink').onclick = e => { e.preventDefault(); go('/salt/' + encodeURIComponent(x.salt_composition)); };
 }, { title: '' });
 
 on(/^\/company\/(.+)$/, async name => {

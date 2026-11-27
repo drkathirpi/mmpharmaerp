@@ -416,3 +416,54 @@ on(/^\/eway\/(.+)$/, async name => {
     catch (e) { $('#ew').innerHTML = `<div class="err"><b>Could not make the JSON</b>${esc(e.message)}</div>`; }
   };
 }, { title: 'E-way bill' });
+
+
+/* ---------- salt screen: products with a salt, batch-wise, exact combination or with other salts; item ledger ---------- */
+const saltParts = s => { const out = []; String(s || '').toUpperCase().split(/\+|&|,/).forEach(c => { const n = c.split(/(?:\s|-)(?=\.?\d)|\(/)[0].replace(/\s+/g, ' ').trim(); if (n && !out.includes(n)) out.push(n); }); return out; };
+let saltMode = 'exact';
+on(/^\/salt\/(.+)$/, async raw => {
+  const salt = decodeURIComponent(raw), want = saltParts(salt), names = want.length ? want : [salt.toUpperCase()];
+  setTitle(salt.length > 28 ? salt.slice(0, 28) + '...' : salt);
+  view.innerHTML = skeleton(6);
+  try {
+    const items = (await list('Item', { fields: ['name', 'item_name', 'manufacturer_company', 'salt_composition'], filters: [['disabled', '=', 0], ...names.map(n => ['salt_composition', 'like', '%' + n + '%'])], order_by: 'item_name asc', limit_page_length: 500 }))
+      .map(x => ({ ...x, c: want.length ? saltParts(x.salt_composition) : [String(x.salt_composition || '').toUpperCase()] })).filter(x => names.every(n => x.c.includes(n)));
+    const exact = items.filter(x => x.c.length === names.length), more = items.filter(x => x.c.length > names.length);
+    const bt = items.length ? await list('Batch', { fields: ['name', 'item', 'expiry_date', 'batch_qty', 'batch_mrp', 'purchase_rate', 'cost_price'], filters: [['item', 'in', items.map(x => x.name)], ['batch_qty', '>', 0]], order_by: 'expiry_date asc', limit_page_length: 2000 }) : [];
+    const by = {}; bt.forEach(b => (by[b.item] = by[b.item] || []).push(b));
+    const draw = () => {
+      const list_ = saltMode === 'exact' ? exact : exact.concat(more);
+      let units = 0, val = 0, nb = 0;
+      const body = list_.map(x => {
+        const bs = by[x.name] || [], extra = x.c.length > names.length ? `<div class="t2">+ ${esc(x.c.filter(n => !names.includes(n)).join(' + '))}</div>` : '';
+        bs.forEach(b => { units += b.batch_qty; val += b.batch_qty * (b.purchase_rate || 0); nb++; });
+        return `<section class="sec"><div class="row tap" data-led="${esc(x.name)}" role="button"><div class="grow"><div class="t1">${esc(x.item_name)}</div><div class="t2">${esc(x.manufacturer_company || '')}</div>${extra}</div><span class="link">Ledger</span></div>
+          ${bs.map(b => { const pr = b.purchase_rate || 0, sell = pr * 1.2, ex = b.expiry_date && b.expiry_date < today(); return `<div class="row tap" data-i="${esc(x.name)}"><div class="grow"><div class="t1">${esc(b.name)}</div><div class="t2">MRP ${inr(b.batch_mrp)}${pr ? ` · Pur ${inr(pr)} · Cost ${inr(b.cost_price)} · Sell ${inr(sell)}` : ''}</div></div>${stamp(b.expiry_date)}<b class="nw ${ex ? 'red' : ''}" style="min-width:40px;text-align:right">${num(b.batch_qty)}</b></div>`; }).join('') || '<div class="pad red t2">No stock</div>'}</section>`;
+      }).join('');
+      $('#sb').innerHTML = `<div class="pad t2">${list_.length} products · ${nb} batches · ${num(units)} units · purchase value ${inr0(val)} · sell rate = purchase + 20%</div>${body || empty('No products', 'No product has this salt.')}`;
+      $$('#sb [data-led]').forEach(e => e.onclick = () => go('/ledger/' + encodeURIComponent(e.dataset.led)));
+      $$('#sb [data-i]').forEach(e => e.onclick = () => go('/item/' + encodeURIComponent(e.dataset.i)));
+    };
+    view.innerHTML = `<div class="chips" id="sm"><button class="chip ${saltMode === 'exact' ? 'on' : ''}" data-m="exact">${names.length > 1 ? 'Only this combination' : 'This salt alone'} (${exact.length})</button><button class="chip ${saltMode === 'more' ? 'on' : ''}" data-m="more">With other salts added (${exact.length + more.length})</button></div><div id="sb"></div>`;
+    $$('#sm .chip').forEach(b => b.onclick = () => { saltMode = b.dataset.m; $$('#sm .chip').forEach(x => x.classList.toggle('on', x === b)); draw(); });
+    draw();
+  } catch (e) { if (e.auth) return loginView(e.message); view.innerHTML = errBox(e); }
+}, { title: 'Salt' });
+
+on(/^\/ledger\/(.+)$/, async raw => {
+  const code = decodeURIComponent(raw); setTitle(code); view.innerHTML = skeleton(6);
+  try {
+    const fy = (() => { const t = new Date(); return (t.getMonth() >= 3 ? t.getFullYear() : t.getFullYear() - 1) + '-04-01'; })();
+    const sle = await list('Stock Ledger Entry', { fields: ['posting_date', 'voucher_type', 'voucher_no', 'actual_qty', 'incoming_rate'], filters: [['item_code', '=', code], ['is_cancelled', '=', 0]], order_by: 'posting_date asc, posting_time asc, creation asc', limit_page_length: 5000 });
+    const g = {}; sle.forEach(s => { const k = s.voucher_type + '|' + s.voucher_no; (g[k] = g[k] || { ...s, actual_qty: 0 }).actual_qty += s.actual_qty; });
+    const rows = Object.values(g);
+    const sales = rows.filter(r => r.voucher_type === 'Sales Invoice').map(r => r.voucher_no), pur = rows.filter(r => r.voucher_type === 'Purchase Invoice').map(r => r.voucher_no);
+    const [sp, pp] = await Promise.all([sales.length ? list('Sales Invoice', { fields: ['name', 'customer_name'], filters: [['name', 'in', sales]], limit_page_length: 2000 }) : [], pur.length ? list('Purchase Invoice', { fields: ['name', 'supplier_name'], filters: [['name', 'in', pur]], limit_page_length: 2000 }) : []]);
+    const party = {}; sp.forEach(x => party[x.name] = x.customer_name); pp.forEach(x => party[x.name] = x.supplier_name);
+    let bal = 0, open = 0; const out = [];
+    rows.forEach(r => { bal += r.actual_qty; if (r.posting_date < fy) open = bal; else out.push({ ...r, bal }); });
+    const route = r => r.voucher_type === 'Sales Invoice' ? '/inv/' + encodeURIComponent(r.voucher_no) : r.voucher_type === 'Purchase Invoice' ? '/pinv/' + encodeURIComponent(r.voucher_no) : '';
+    view.innerHTML = `<div class="pad t2">From ${fmtDate(fy)} · opening ${num(open)} · tap a bill to open it</div><section class="sec">${out.map(r => `<div class="row ${route(r) ? 'tap' : ''}" data-r="${esc(route(r))}"><div class="grow"><div class="t1">${esc(r.voucher_no)}</div><div class="t2">${fmtDate(r.posting_date)} · ${esc(party[r.voucher_no] || (r.voucher_type === 'Stock Reconciliation' ? 'Opening stock' : r.voucher_type))}</div></div><div class="r"><b class="${r.actual_qty < 0 ? 'red' : 'green'}">${r.actual_qty > 0 ? '+' : ''}${num(r.actual_qty)}</b><div class="t2">balance ${num(r.bal)}</div></div></div>`).reverse().join('') || empty('No entries', 'Nothing moved this year.')}</section>`;
+    $$('[data-r]').forEach(e => { if (e.dataset.r) e.onclick = () => go(e.dataset.r); });
+  } catch (e) { if (e.auth) return loginView(e.message); view.innerHTML = errBox(e); }
+}, { title: 'Ledger' });

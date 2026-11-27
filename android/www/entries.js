@@ -329,19 +329,33 @@ async function collectSheet(party, inv) { return paySheet('Customer', party, inv
 async function paySheet(type, party, inv) {
   const sales = type === 'Customer', dt = sales ? 'Sales Invoice' : 'Purchase Invoice';
   try {
-    inv = inv || await list(dt, { fields: ['name', 'due_date', 'outstanding_amount'], filters: [[sales ? 'customer' : 'supplier', '=', party], ['docstatus', '=', 1], ['outstanding_amount', '>', 0]], order_by: 'due_date asc', limit_page_length: 300 });
+    inv = inv || await list(dt, { fields: ['name', 'posting_date', 'due_date', 'outstanding_amount'], filters: [[sales ? 'customer' : 'supplier', '=', party], ['docstatus', '=', 1], ['outstanding_amount', '>', 0]], order_by: 'due_date asc', limit_page_length: 300 });
     const modes = await list('Mode of Payment', { fields: ['name'], limit_page_length: 20 }), total = inv.reduce((a, i) => a + i.outstanding_amount, 0);
     openSheet(sales ? 'Collect payment' : 'Pay supplier', `<div class="pad"><div class="t2">${esc(party)}</div><div class="mid">${inr0(total)} ${sales ? 'outstanding' : 'to pay'}</div></div>
-      <label class="field"><input id="am" type="number" inputmode="decimal" placeholder="Amount ${sales ? 'received' : 'paid'}" value="${total || ''}" aria-label="Amount"></label>
+      <label class="field"><input id="am" type="number" inputmode="decimal" placeholder="Amount ${sales ? 'received' : 'paid'}" value="" aria-label="Amount"></label>
       <label class="field"><select id="md" class="in" aria-label="Mode of payment">${modes.map(m => `<option ${m.name === 'Cash' ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
       <label class="field"><input id="rf" placeholder="Reference or cheque number (optional)" aria-label="Reference"></label>
       <label class="field"><input id="pd" type="date" value="${today()}" aria-label="Date"></label>
+      ${inv.length ? `<div class="cap">Which bills is this for? <button class="link" id="old" style="float:right">Fill oldest first</button></div>
+      <div id="bls">${inv.map((i, k) => `<div class="row"><label style="display:flex;align-items:center;gap:10px;flex:1"><input type="checkbox" class="bc" data-k="${k}" style="width:20px;height:20px"><div class="grow"><div class="t1">${esc(i.name)}</div><div class="t2">${fmtDate(i.posting_date || i.due_date)} · pending ${inr(i.outstanding_amount)}</div></div></label><input class="ba" type="number" inputmode="decimal" min="0" data-k="${k}" placeholder="0" aria-label="Amount against ${esc(i.name)}" style="width:90px;text-align:right;padding:6px;border:1px solid var(--line,#ccc);border-radius:8px;background:transparent;color:inherit"></div>`).join('')}</div>` : ''}
       <div class="pad t2" id="al"></div><div class="acts"><button class="btn" id="sv">${sales ? 'Save receipt' : 'Save payment'}</button></div>`, root => {
-      const alloc = () => { let r = parseFloat($('#am', root).value) || 0; const a = []; for (const i of inv) { if (r <= 0) break; const x = Math.min(r, i.outstanding_amount); a.push({ reference_doctype: dt, reference_name: i.name, allocated_amount: +x.toFixed(2) }); r -= x; } return { a, extra: r }; };
-      const upd = () => { const { a, extra } = alloc(); $('#al', root).textContent = a.length ? `Clears ${a.length} bill${a.length > 1 ? 's' : ''}, oldest first${extra > 0.009 ? `; ${inr(extra)} stays as advance` : ''}.` : ''; };
+      // you choose the bills; nothing is put against a bill unless you tick it
+      const put = inv.map(() => 0);
+      const amtNow = () => parseFloat($('#am', root).value) || 0;
+      const used = skip => put.reduce((s, x, k) => s + (k === skip ? 0 : x), 0);
+      const alloc = () => { const a = []; inv.forEach((i, k) => { if (put[k] > 0) a.push({ reference_doctype: dt, reference_name: i.name, allocated_amount: +put[k].toFixed(2) }); }); return { a, extra: amtNow() - used() }; };
+      const upd = () => {
+        inv.forEach((i, k) => { const c = $(`.bc[data-k="${k}"]`, root), b = $(`.ba[data-k="${k}"]`, root); if (c) c.checked = put[k] > 0; if (b && document.activeElement !== b) b.value = put[k] ? +put[k].toFixed(2) : ''; });
+        const { a, extra } = alloc();
+        $('#al', root).innerHTML = a.length ? `Against ${a.length} bill${a.length > 1 ? 's' : ''}: ${inr(used())}${extra > 0.009 ? ` · ${inr(extra)} stays as advance` : extra < -0.009 ? ` · <span class="red">${inr(-extra)} more than the amount</span>` : ''}` : (amtNow() ? 'No bill ticked: the whole amount stays as advance.' : 'Tick the bills this money is for.');
+      };
+      $$('.bc', root).forEach(c => c.onchange = () => { const k = +c.dataset.k; if (c.checked) { const a = amtNow(); put[k] = a ? Math.max(0, Math.min(inv[k].outstanding_amount, a - used(k))) : inv[k].outstanding_amount; if (!a) $('#am', root).value = +used().toFixed(2); if (!put[k]) toast('No amount left for this bill'); } else put[k] = 0; upd(); });
+      $$('.ba', root).forEach(b => b.oninput = () => { const k = +b.dataset.k; put[k] = Math.max(0, Math.min(inv[k].outstanding_amount, parseFloat(b.value) || 0)); upd(); });
+      if ($('#old', root)) $('#old', root).onclick = () => { let a = amtNow(); inv.forEach((i, k) => { put[k] = a > 0 ? Math.min(i.outstanding_amount, a) : 0; a -= put[k]; }); upd(); };
       $('#am', root).oninput = upd; upd();
       $('#sv', root).onclick = async () => {
-        const amt = parseFloat($('#am', root).value) || 0; if (amt <= 0) return toast('Enter the amount');
+        const amt = amtNow(); if (amt <= 0) return toast('Enter the amount');
+        if (used() > amt + 0.009) return toast(`Bills ticked add up to ${inr(used())}, more than ${inr(amt)}`);
         $('#sv', root).disabled = true;
         try {
           const mode = $('#md', root).value, pd = $('#pd', root).value || today();
